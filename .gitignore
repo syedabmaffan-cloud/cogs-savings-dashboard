@@ -1,0 +1,11 @@
+# secrets / local state
+.env
+*.pid
+
+# logs
+.opencode/logs/*.log
+.opencode/logs/cogs-data.json
+
+# generated site is committed on purpose (GitHub Pages source = /docs)
+node_modules/
+Thumbs.db

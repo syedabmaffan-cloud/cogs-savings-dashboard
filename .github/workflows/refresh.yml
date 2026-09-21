@@ -1,0 +1,54 @@
+name: Refresh COGS data
+
+# Rebuilds docs/data.json (+ docs/index.html) from the iBOS MCP server and the budget
+# Google Sheet, then commits. GitHub Pages serves the updated site automatically.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   COGS_MCP_URL, COGS_MCP_KEY
+#   COGS_GCLIENT_ID, COGS_GCLIENT_SECRET, COGS_GREFRESH
+
+on:
+  schedule:
+    - cron: '30 2 * * *'   # daily 02:30 UTC (~08:30 Asia/Dhaka)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cogs-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract actuals + budget
+        shell: pwsh
+        env:
+          COGS_MCP_URL:        ${{ secrets.COGS_MCP_URL }}
+          COGS_MCP_KEY:        ${{ secrets.COGS_MCP_KEY }}
+          COGS_GCLIENT_ID:     ${{ secrets.COGS_GCLIENT_ID }}
+          COGS_GCLIENT_SECRET: ${{ secrets.COGS_GCLIENT_SECRET }}
+          COGS_GREFRESH:       ${{ secrets.COGS_GREFRESH }}
+        run: ./.opencode/cogs-extract.ps1
+
+      - name: Build dashboard
+        shell: pwsh
+        run: ./.opencode/cogs-build.ps1
+
+      - name: Commit refreshed data
+        shell: pwsh
+        run: |
+          git config user.name  "cogs-refresh-bot"
+          git config user.email "cogs-refresh-bot@users.noreply.github.com"
+          git add docs
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "chore: refresh COGS data $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+            git push
+          } else {
+            Write-Host "No data changes."
+          }

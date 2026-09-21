@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>COGS Savings Dashboard</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#161d2e; --panel2:#1d2639; --line:#2a3550;
+    --txt:#e8edf7; --mut:#93a0bd; --acc:#4f8cff; --pos:#25b06b; --neg:#e5484d; --neu:#8b97b4;
+    --chip:#22304d; --warn:#e0a126;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif}
+  a{color:var(--acc)}
+  header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#131a2b,#0f1420);border-bottom:1px solid var(--line);padding:12px 18px}
+  .brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .brand h1{font-size:17px;margin:0;letter-spacing:.2px}
+  .brand .meta{color:var(--mut);font-size:11.5px}
+  .tabs{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .tab{padding:6px 13px;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--mut);cursor:pointer;font-size:12.5px}
+  .tab.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  main{padding:16px 18px 60px}
+  .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:14px}
+  .fld{display:flex;flex-direction:column;gap:3px}
+  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
+  select,input[type=text]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px 8px;font-size:12.5px;min-width:120px}
+  input[type=text]{min-width:180px}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12.5px}
+  button:hover{border-color:var(--acc)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:var(--panel2)}
+  .seg button.active{background:var(--acc);color:#fff;font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:11px;margin-bottom:16px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 13px}
+  .kpi .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
+  .kpi .v{font-size:20px;font-weight:700;margin-top:5px}
+  .kpi .s{font-size:11px;color:var(--mut);margin-top:3px}
+  .pos{color:var(--pos)!important}.neg{color:var(--neg)!important}.neu{color:var(--neu)!important}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:1150px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 14px;margin-bottom:14px}
+  .card h3{margin:0 0 10px;font-size:13.5px;letter-spacing:.2px}
+  .card h3 .sub{color:var(--mut);font-weight:400;font-size:11px;margin-left:6px}
+  table{width:100%;border-collapse:collapse;font-size:12.3px}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{color:var(--mut);font-weight:600;font-size:10.7px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;background:var(--panel)}
+  td.num,th.num{text-align:right}
+  tbody tr:hover{background:#1b2438}
+  tr.clickable{cursor:pointer}
+  .tblwrap{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:9px}
+  .pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:700;background:var(--chip);color:var(--mut)}
+  .pill.rm{background:#20324f;color:#7fb2ff}.pill.pm{background:#2c2545;color:#c39bff}
+  .pill.no{background:#3a2124;color:#f08a8d}
+  .bar{height:8px;border-radius:5px;background:var(--panel2);overflow:hidden;min-width:60px}
+  .bar>i{display:block;height:100%}
+  canvas{width:100%;display:block}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--mut);margin-top:8px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .note{color:var(--mut);font-size:11.5px;margin-top:8px}
+  .hidden{display:none!important}
+  .sbuSel{display:flex;gap:7px;flex-wrap:wrap}
+  .sbuSel button{padding:6px 11px}
+  .sbuSel button.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  .drill{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px}
+  .kv{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+  .kv b{color:var(--txt)}
+  .flexhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .muted{color:var(--mut)}
+  .small{font-size:11px}
+  .warnbox{background:#33290f;border:1px solid #6b5518;color:#f0d089;border-radius:8px;padding:9px 11px;font-size:12px;margin-bottom:12px}
+  .status{font-size:11.5px;color:var(--mut);min-width:120px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>COGS Savings Dashboard</h1>
+    <span class="meta" id="hdrMeta"></span>
+    <span style="flex:1"></span>
+    <span class="status" id="hdrStatus"></span>
+    <button id="btnRefresh" title="Reload the latest data.json">↻ Refresh data</button>
+  </div>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="exec">Executive Summary</div>
+    <div class="tab" data-tab="sbu">SBU Analysis</div>
+    <div class="tab" data-tab="item">Item Analysis</div>
+    <div class="tab" data-tab="dq">Data Quality</div>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="fld"><label>Fiscal Year</label><select id="fFy"></select></div>
+    <div class="fld"><label>View</label>
+      <div class="seg" id="fMode"><button data-m="YTD" class="active">YTD</button><button data-m="MTD">MTD</button></div>
+    </div>
+    <div class="fld"><label>Reporting Month</label><select id="fMonth"></select></div>
+    <div class="fld"><label>SBU</label><select id="fSbu"></select></div>
+    <div class="fld"><label>RM / PM</label><select id="fKind"><option value="">All</option><option>RM</option><option>PM</option></select></div>
+    <div class="fld"><label>Item Category</label><select id="fCat"></select></div>
+    <div class="fld"><label>Source</label><select id="fSrc"><option value="">All</option><option>Local</option><option>Import</option><option>n/a</option></select></div>
+    <div class="fld"><label>Search item</label><input type="text" id="fText" placeholder="code or name" /></div>
+    <button id="btnReset">Reset</button>
+    <span style="flex:1"></span>
+    <button class="primary" id="btnCsv">Export CSV</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="warnbox hidden" id="warnBox"></div>
+
+  <section id="tab-exec">
+    <div class="grid2">
+      <div class="card"><h3>SBU-wise Savings <span class="sub">(current issue value, LY &amp; budget savings)</span></h3><div id="execSbu"></div></div>
+      <div class="card"><h3>Monthly Trend <span class="sub">(fiscal year Jul &rarr; Jun)</span></h3><canvas id="cvTrend" height="230"></canvas>
+        <div class="legend"><span><i style="background:#4f8cff"></i>Current issue value</span><span><i style="background:#8b97b4"></i>LY benchmark</span><span><i style="background:#e0a126"></i>Budget benchmark</span><span><i style="background:#25b06b"></i>LY savings</span><span><i style="background:#d6634b"></i>Budget savings</span></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Top 10 Savings Items <span class="sub">(vs LY / budget)</span></h3><div id="topSave"></div></div>
+      <div class="card"><h3>Top 10 Adverse Items <span class="sub">(current rate above LY / budget)</span></h3><div id="topAdv"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-sbu" class="hidden">
+    <div class="card"><h3>Select SBU</h3><div class="sbuSel" id="sbuSel"></div></div>
+    <div class="kpis" id="kpisSbu"></div>
+    <div class="grid2">
+      <div class="card"><h3>Current vs LY vs Budget <span class="sub">(rate &amp; value)</span></h3><div id="sbuCmp"></div></div>
+      <div class="card"><h3 id="sbuTrendTitle">Monthly Trend</h3><canvas id="cvTrendSbu" height="230"></canvas>
+        <div class="legend"><span><i style="background:#4f8cff"></i>Current value</span><span><i style="background:#25b06b"></i>LY savings</span><span><i style="background:#e0a126"></i>Budget savings</span></div>
+      </div>
+    </div>
+    <div class="card"><h3>Item Drill-down <span class="sub">(click a row for month breakdown)</span></h3><div id="sbuItems"></div></div>
+  </section>
+
+  <section id="tab-item" class="hidden">
+    <div class="card">
+      <div class="flexhead"><h3 style="margin:0">Item-wise Savings <span class="sub" id="itemCount"></span></h3>
+        <span class="muted small">Savings = (LY/Budget rate &minus; Current rate) &times; Current period quantity. Negative = adverse.</span></div>
+      <div id="itemTable"></div>
+    </div>
+  </section>
+
+  <section id="tab-dq" class="hidden">
+    <div class="grid2">
+      <div class="card"><h3>Items without LY rate <span class="sub">(no issue in matching LY months)</span></h3><div id="dqNoLy"></div></div>
+      <div class="card"><h3>Items without Budget rate <span class="sub">&ldquo;No Budget&rdquo;</span></h3><div id="dqNoBud"></div></div>
+      <div class="card"><h3>Unmapped / unmatched budget records <span class="sub">(budget with no matching issue)</span></h3><div id="dqUnmapped"></div></div>
+      <div class="card"><h3>Duplicate budget records</h3><div id="dqDup"></div></div>
+      <div class="card"><h3>Fuzzy-matched budget <span class="sub">(verify these)</span></h3><div id="dqFuzzy"></div></div>
+      <div class="card"><h3>Coverage &amp; classification exceptions</h3><div id="dqCoverage"></div></div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* Embedded fallback snapshot. On a web host the page instead loads ./data.json at runtime,
+   so the data can be refreshed without rebuilding this file. */
+window.COGS = /*__COGS_DATA__*/ null;
+
+/* ============================ helpers ============================ */
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function pad(n){return (n<10?'0':'')+n;}
+function ym(y,m){return y+'-'+pad(m);}
+function shiftY(pm,d){const p=pm.split('-');return (parseInt(p[0],10)+d)+'-'+p[1];}
+function fyOf(pm){const p=pm.split('-').map(Number);return p[1]>=7?p[0]:p[0]-1;}
+function fyLabel(fy){return fy+'-'+String(fy+1).substr(2);}
+function fyMonths(fy){const a=[];for(let m=7;m<=12;m++)a.push(ym(fy,m));for(let m=1;m<=6;m++)a.push(ym(fy+1,m));return a;}
+function monLabel(pm){const p=pm.split('-').map(Number);return MON[p[1]-1]+' '+String(p[0]).substr(2);}
+function norm(s){return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function toks(s){return (s||'').toUpperCase().split(/[^A-Z0-9]+/).filter(t=>t.length>1);}
+function srcOf(name){return /local|deshi|indigenous/i.test(name)?'Local':(/import|foreign|china|korea|russia|ukraine|canada|india|indian|thai|malaysia/i.test(name)?'Import':'n/a');}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+const nf0=new Intl.NumberFormat('en-US',{maximumFractionDigits:0});
+const nf1=new Intl.NumberFormat('en-US',{maximumFractionDigits:1});
+const nf2=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
+function fN(v){return v==null||isNaN(v)?'—':nf0.format(v);}
+function f2(v){return v==null||isNaN(v)?'—':nf2.format(v);}
+function fCr(v){if(v==null||isNaN(v))return '—';const cr=v/1e7;return (Math.abs(cr)>=100?nf0.format(cr):nf1.format(cr))+' cr';}
+function fPct(v){return v==null||isNaN(v)?'—':(v*100).toFixed(1)+'%';}
+function cls(v){return v>0.0001?'pos':(v<-0.0001?'neg':'neu');}
+function sign(v){return v>0?'+':'';}
+
+/* ============================ data-bound state ============================ */
+let DATA={sbus:[],items:[],budget:[]};
+let META={};
+let SBU={};
+let ITEMS_BY_KEY={};
+let BINDEX={byKey:{},rowsBySbu:{},dups:[]};
+let FYS=[];
+let ASOF=null;
+let DATA_MONTHS=new Set();
+const state={fy:null,mode:'YTD',month:null,sbu:'',kind:'',cat:'',src:'',text:'',sbuSel:'ALL'};
+
+function setData(d){
+  DATA = (d && d.items) ? d : {sbus:[],items:[],budget:[]};
+  META = DATA.meta || DATA;
+  SBU={}; DATA.sbus.forEach(s=>SBU[s.bu]=s);
+  ITEMS_BY_KEY={}; DATA.items.forEach(it=>{ITEMS_BY_KEY[it.bu+'|'+it.itemId]=it;});
+  BINDEX={byKey:{},rowsBySbu:{},dups:[]};
+  DATA.budget.forEach(b=>{
+    if(!b.sbu) return;
+    const ck=b.sbu+'|'+(b.code?norm(b.code):'');
+    const dk=b.sbu+'|'+norm(b.desc);
+    (BINDEX.rowsBySbu[b.sbu]=BINDEX.rowsBySbu[b.sbu]||[]).push(b);
+    if(b.code && !BINDEX.byKey[ck]) BINDEX.byKey[ck]=b; else if(b.code) BINDEX.dups.push(b);
+    if(!BINDEX.byKey[dk]) BINDEX.byKey[dk]=b;
+  });
+  FYS=[...new Set(DATA.items.flatMap(it=>Object.keys(it.months).map(fyOf)))].sort((a,b)=>b-a);
+  ASOF=META.asOf || (DATA.items[0]?Object.keys(DATA.items[0].months).sort().pop():null);
+  DATA_MONTHS=new Set();
+  DATA.items.forEach(it=>Object.keys(it.months).forEach(m=>{const x=it.months[m];if(x&&(x.q!==0||x.v!==0))DATA_MONTHS.add(m);}));
+}
+function syncState(){
+  if(!FYS.includes(state.fy)) state.fy=FYS[0]||null;
+  if(state.month && !monthsWithData(state.fy).includes(state.month)) state.month=null;
+}
+function monthsWithData(fy){return fyMonths(fy).filter(m=>DATA_MONTHS.has(m));}
+function periodMonths(){
+  const av=monthsWithData(state.fy); if(!av.length)return [];
+  const end=(state.month&&av.includes(state.month))?state.month:av[av.length-1];
+  return state.mode==='MTD'?[end]:av.filter(m=>m<=end);
+}
+
+/* ============================ budget ============================ */
+function budgetFor(it){
+  const sc=SBU[it.bu]?SBU[it.bu].code:null; if(!sc) return null;
+  if(it.code){const k=sc+'|'+norm(it.code); if(BINDEX.byKey[k]) return {row:BINDEX.byKey[k],method:'code'};}
+  const k2=sc+'|'+norm(it.name); if(BINDEX.byKey[k2]) return {row:BINDEX.byKey[k2],method:'desc'};
+  const rows=BINDEX.rowsBySbu[sc]||[]; const T=toks(it.name); if(!T.length) return null;
+  let best=null,bestScore=0;
+  rows.forEach(b=>{const BT=toks(b.desc);if(!BT.length)return;let inter=0;T.forEach(t=>{if(BT.includes(t))inter++;});
+    const s=inter/Math.max(T.length,BT.length); if(s>bestScore){bestScore=s;best=b;}});
+  return (best&&bestScore>=0.6)?{row:best,method:'fuzzy',score:bestScore}:null;
+}
+function budgetRate(row,months){if(!row)return null;let s=0,n=0;months.forEach(m=>{if(row.rates[m]!=null){s+=row.rates[m];n++;}});return n?s/n:null;}
+function budgetRateForMonth(row,m){return (row&&row.rates[m]!=null)?row.rates[m]:null;}
+
+/* ============================ compute ============================ */
+function sumItem(it,months,ly){let q=0,v=0;for(const m of months){const k=ly?shiftY(m,-1):m;const d=it.months[k];if(d){q+=d.q;v+=d.v;}}return {q:q,v:v,rate:q?v/q:null};}
+function computeItems(){
+  const months=periodMonths(); const out=[];
+  DATA.items.forEach(it=>{
+    const sc=SBU[it.bu]; if(!sc) return;
+    if(state.sbu && it.bu!==parseInt(state.sbu,10)) return;
+    if(state.kind && it.kind!==state.kind) return;
+    if(state.cat && it.cat!==state.cat) return;
+    if(state.text && !(it.name+' '+it.code).toUpperCase().includes(state.text.toUpperCase())) return;
+    if(state.src && srcOf(it.name)!==state.src) return;
+    const ly=sumItem(it,months,true), cur=sumItem(it,months,false);
+    const bud=budgetFor(it); const br=bud?budgetRate(bud.row,months):null;
+    const r={bu:it.bu,itemId:it.itemId,sbu:sc.code,sbuName:sc.name,code:it.code,name:it.name,kind:it.kind,cat:it.cat,uom:it.uom,
+      cq:cur.q,cv:cur.v,cRate:cur.rate,lyQy:ly.q,lyV:ly.v,lyRate:ly.rate,
+      budRate:br,budMethod:bud?bud.method:null,budRow:bud?bud.row:null};
+    r.lySav=(r.lyRate!=null&&r.cRate!=null)?(r.lyRate-r.cRate)*r.cq:null;
+    r.lyBench=(r.lyRate!=null)?r.lyRate*r.cq:null;
+    r.budSav=(r.budRate!=null&&r.cRate!=null)?(r.budRate-r.cRate)*r.cq:null;
+    r.budBench=(r.budRate!=null)?r.budRate*r.cq:null;
+    out.push(r);
+  });
+  return out;
+}
+function totals(rows){
+  const t={cq:0,cv:0,lySav:0,lyBench:0,budSav:0,budBench:0,advLy:0,advBud:0,nItems:0,nRM:0,nPM:0,noLy:0,noBud:0};
+  rows.forEach(r=>{ if(r.cq<=0)return;
+    t.nItems++; if(r.kind==='RM')t.nRM++; else if(r.kind==='PM')t.nPM++;
+    t.cq+=r.cq; t.cv+=r.cv;
+    if(r.lySav!=null){t.lySav+=r.lySav;t.lyBench+=r.lyBench;if(r.lySav<0)t.advLy+=r.lySav;}else t.noLy++;
+    if(r.budSav!=null){t.budSav+=r.budSav;t.budBench+=r.budBench;if(r.budSav<0)t.advBud+=r.budSav;}else t.noBud++;
+  });
+  t.rate=t.cq?t.cv/t.cq:null; t.lyPct=t.lyBench?t.lySav/t.lyBench:null; t.budPct=t.budBench?t.budSav/t.budBench:null;
+  return t;
+}
+
+/* ============================ charts ============================ */
+function mount(cv){const dpr=window.devicePixelRatio||1;const w=cv.clientWidth||600;const h=cv.height||220;cv.width=w*dpr;cv.height=h*dpr;const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);return {x,w,h};}
+function lineChart(cv,labels,series){
+  const {x,w,h}=mount(cv); const padL=54,padR=12,padT=12,padB=30; const iw=w-padL-padR, ih=h-padT-padB;
+  let max=0,min=0; series.forEach(s=>s.values.forEach(v=>{if(v==null)return;if(v>max)max=v;if(v<min)min=v;}));
+  if(max===0&&min===0)max=1; if(min>0)min=0; if(max<0)max=0;
+  const span=max-min||1; const X=i=>padL+(labels.length<=1?iw/2:iw*i/(labels.length-1)); const Y=v=>padT+ih-(v-min)/span*ih;
+  x.strokeStyle='#2a3550';x.fillStyle='#93a0bd';x.font='10px Segoe UI';
+  for(let i=0;i<=4;i++){const y=padT+ih*i/4;x.beginPath();x.moveTo(padL,y);x.lineTo(w-padR,y);x.stroke();x.fillText(fCr(max-(span*i/4)),4,y+3);}
+  if(min<0){x.strokeStyle='#3a4666';x.beginPath();x.moveTo(padL,Y(0));x.lineTo(w-padR,Y(0));x.stroke();}
+  labels.forEach((lb,i)=>{x.fillStyle='#93a0bd';x.fillText(lb,X(i)-15,padT+ih+14);});
+  series.forEach(s=>{x.strokeStyle=s.color;x.lineWidth=2;x.beginPath();let started=false;
+    s.values.forEach((v,i)=>{if(v==null)return;const px=X(i),py=Y(v);if(!started){x.moveTo(px,py);started=true;}else x.lineTo(px,py);});x.stroke();
+    x.fillStyle=s.color;s.values.forEach((v,i)=>{if(v==null)return;x.beginPath();x.arc(X(i),Y(v),2.4,0,7);x.fill();});});
+}
+
+/* ============================ renderers ============================ */
+function kpiHTML(t){
+  const cards=[
+    ['Total RM/PM Qty',fN(t.cq),t.nItems+' items ('+t.nRM+' RM / '+t.nPM+' PM)',''],
+    ['Total Issue Value',fCr(t.cv),'BDT '+fN(t.cv),''],
+    ['Average RM/PM Rate',f2(t.rate),'per unit',''],
+    ['LY Savings',sign(t.lySav)+fCr(t.lySav),'LY savings %: '+fPct(t.lyPct),cls(t.lySav)],
+    ['Budget Savings',sign(t.budSav)+fCr(t.budSav),'Budget savings %: '+fPct(t.budPct),cls(t.budSav)],
+    ['Adverse Impact (LY)',fCr(t.advLy),'sum of negative LY savings','neg'],
+    ['Items w/o LY rate',fN(t.noLy),'see Data Quality',t.noLy?'neu':''],
+    ['Items w/o Budget',fN(t.noBud),'"No Budget"','neu']
+  ];
+  return cards.map(c=>'<div class="kpi"><div class="l">'+c[0]+'</div><div class="v '+c[3]+'">'+c[1]+'</div><div class="s">'+c[2]+'</div></div>').join('');
+}
+function renderMiniTable(items,key){
+  if(!items.length)return '<div class="muted small">None.</div>';
+  return '<div class="tblwrap" style="max-height:230px"><table><thead><tr><th>SBU</th><th>Item</th><th class="num">Rate</th><th class="num">Ref rate</th><th class="num">Saving</th></tr></thead><tbody>'+
+    items.map(r=>{const ref=key==='lySav'?r.lyRate:r.budRate;const v=r[key];
+      return '<tr><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,40)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+f2(ref)+'</td><td class="num" style="color:'+(v>=0?'#25b06b':'#e5484d')+';font-weight:600">'+sign(v)+fCr(v)+'</td></tr>';}).join('')+'</tbody></table></div>';
+}
+function renderExec(rows){
+  const t=totals(rows);
+  document.getElementById('kpis').innerHTML=kpiHTML(t);
+  const bySbu={};
+  rows.forEach(r=>{if(r.cq<=0)return;const k=r.sbu;const o=bySbu[k]=bySbu[k]||{sbu:k,name:r.sbuName,cv:0,ly:0,bud:0,lyB:0,budB:0};o.cv+=r.cv;
+    if(r.lySav!=null){o.ly+=r.lySav;o.lyB+=r.lyBench;} if(r.budSav!=null){o.bud+=r.budSav;o.budB+=r.budBench;}});
+  const arr=Object.values(bySbu).sort((a,b)=>b.cv-a.cv);
+  document.getElementById('execSbu').innerHTML='<div class="tblwrap"><table><thead><tr><th>SBU</th><th class="num">Issue Value</th><th class="num">LY Savings</th><th class="num">LY %</th><th class="num">Budget Savings</th><th class="num">Budget %</th></tr></thead><tbody>'+
+    arr.map(o=>'<tr class="clickable" data-sbu="'+o.sbu+'"><td>'+esc(o.sbu)+' <span class="muted small">'+esc(o.name).slice(0,28)+'</span></td>'+
+      '<td class="num">'+fCr(o.cv)+'</td><td class="num '+cls(o.ly)+'">'+sign(o.ly)+fCr(o.ly)+'</td><td class="num '+cls(o.ly)+'">'+fPct(o.lyB?o.ly/o.lyB:null)+'</td>'+
+      '<td class="num '+cls(o.bud)+'">'+sign(o.bud)+fCr(o.bud)+'</td><td class="num '+cls(o.bud)+'">'+fPct(o.budB?o.bud/o.budB:null)+'</td></tr>').join('')+
+    '</tbody></table></div>';
+  document.querySelectorAll('#execSbu tr[data-sbu]').forEach(tr=>tr.onclick=()=>{state.sbuSel=tr.dataset.sbu;document.querySelector('[data-tab="sbu"]').click();});
+
+  const months=fyMonths(state.fy), cur=[],lyB=[],budB=[],lyS=[],budS=[];
+  months.forEach(m=>{let cv=0,lb=0,bb=0,ls=0,bs=0;
+    rows.forEach(r=>{const it=ITEMS_BY_KEY[r.bu+'|'+r.itemId];const dd=it&&it.months[m];const q=dd?dd.q:0,v=dd?dd.v:0;
+      const lm=it&&it.months[shiftY(m,-1)];const lq=lm?lm.q:0,lv=lm?lm.v:0;cv+=v;
+      if(lq>0){const lr=lv/lq;lb+=lr*q;if(q>0)ls+=(lr-(v/q))*q;}
+      const br=r.budRow?budgetRateForMonth(r.budRow,m):null;if(br!=null&&q>0){bb+=br*q;bs+=(br-(v/q))*q;}});
+    cur.push(cv);lyB.push(lb);budB.push(bb);lyS.push(ls);budS.push(bs);});
+  lineChart(document.getElementById('cvTrend'),months.map(monLabel),[{color:'#4f8cff',values:cur},{color:'#8b97b4',values:lyB},{color:'#e0a126',values:budB},{color:'#25b06b',values:lyS},{color:'#d6634b',values:budS}]);
+
+  const valid=rows.filter(r=>r.cq>0);
+  const byLy=[...valid].filter(r=>r.lySav!=null).sort((a,b)=>b.lySav-a.lySav).slice(0,10);
+  const byBud=[...valid].filter(r=>r.budSav!=null).sort((a,b)=>b.budSav-a.budSav).slice(0,10);
+  document.getElementById('topSave').innerHTML=(byLy.length?'<div class="muted small" style="margin-bottom:5px">vs LY</div>':'')+renderMiniTable(byLy,'lySav')+
+     (byBud.length?'<div class="muted small" style="margin:10px 0 5px">vs Budget</div>':'')+renderMiniTable(byBud,'budSav');
+  const advLy=[...valid].filter(r=>r.lySav!=null&&r.lySav<0).sort((a,b)=>a.lySav-b.lySav).slice(0,10);
+  const advBud=[...valid].filter(r=>r.budSav!=null&&r.budSav<0).sort((a,b)=>a.budSav-b.budSav).slice(0,10);
+  document.getElementById('topAdv').innerHTML=(advLy.length?'<div class="muted small" style="margin-bottom:5px">current rate &gt; LY rate</div>':'')+renderMiniTable(advLy,'lySav')+
+     (advBud.length?'<div class="muted small" style="margin:10px 0 5px">current rate &gt; budget rate</div>':'')+renderMiniTable(advBud,'budSav');
+}
+function renderSbu(rows){
+  const sel=document.getElementById('sbuSel'); const codes=['ALL'].concat(DATA.sbus.map(s=>s.code));
+  sel.innerHTML=codes.map(c=>'<button data-s="'+c+'" class="'+(state.sbuSel===c?'active':'')+'">'+c+'</button>').join('');
+  sel.querySelectorAll('button').forEach(b=>b.onclick=()=>{state.sbuSel=b.dataset.s;renderAll();});
+  let scoped=rows; if(state.sbuSel!=='ALL')scoped=rows.filter(r=>r.sbu===state.sbuSel);
+  document.getElementById('kpisSbu').innerHTML=kpiHTML(totals(scoped));
+  const t=totals(scoped);
+  document.getElementById('sbuCmp').innerHTML='<div class="kv"><span>Current rate <b>'+f2(t.rate)+'</b></span>'+
+    '<span>LY savings <b class="'+cls(t.lySav)+'">'+sign(t.lySav)+fCr(t.lySav)+'</b></span>'+
+    '<span>Budget savings <b class="'+cls(t.budSav)+'">'+sign(t.budSav)+fCr(t.budSav)+'</b></span>'+
+    '<span>Items <b>'+t.nItems+'</b></span></div>'+
+    '<div class="note">Item-level savings are summed (never SBU-average rate &times; SBU quantity).</div>';
+  const months=fyMonths(state.fy), cur=[],lyS=[],budS=[];
+  months.forEach(m=>{let cv=0,ls=0,bs=0;
+    scoped.forEach(r=>{const it=ITEMS_BY_KEY[r.bu+'|'+r.itemId];const dd=it&&it.months[m];const q=dd?dd.q:0,v=dd?dd.v:0;
+      const lm=it&&it.months[shiftY(m,-1)];const lq=lm?lm.q:0,lv=lm?lm.v:0;cv+=v;
+      if(lq>0&&q>0){const lr=lv/lq;ls+=(lr-v/q)*q;}
+      const br=r.budRow?budgetRateForMonth(r.budRow,m):null;if(br!=null&&q>0)bs+=(br-v/q)*q;});
+    cur.push(cv);lyS.push(ls);budS.push(bs);});
+  document.getElementById('sbuTrendTitle').innerHTML=(state.sbuSel==='ALL'?'All SBU':state.sbuSel)+' &mdash; Monthly Trend';
+  lineChart(document.getElementById('cvTrendSbu'),months.map(monLabel),[{color:'#4f8cff',values:cur},{color:'#25b06b',values:lyS},{color:'#e0a126',values:budS}]);
+  const list=[...scoped].filter(r=>r.cq>0).sort((a,b)=>(b.lySav||-1e18)-(a.lySav||-1e18));
+  const wrap=document.getElementById('sbuItems');
+  wrap.innerHTML='<div class="tblwrap"><table><thead><tr><th>Code</th><th>Item</th><th>Type</th><th class="num">Qty</th><th class="num">Cur rate</th><th class="num">LY rate</th><th class="num">LY saving</th><th class="num">Bud rate</th><th class="num">Bud saving</th></tr></thead><tbody>'+
+    list.map((r,i)=>'<tr class="clickable" data-i="'+i+'"><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,48)+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
+      '<td class="num">'+fN(r.cq)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+(r.lyRate!=null?f2(r.lyRate):'<span class="pill no">N/A</span>')+'</td>'+
+      '<td class="num '+cls(r.lySav)+'">'+(r.lySav!=null?sign(r.lySav)+fCr(r.lySav):'—')+'</td>'+
+      '<td class="num">'+(r.budRate!=null?f2(r.budRate):'<span class="pill no">No Budget</span>')+'</td>'+
+      '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>'+
+      '<tr class="hidden" id="drill'+i+'"><td colspan="9">'+drillHTML(r)+'</td></tr>').join('')+'</tbody></table></div>';
+  wrap.querySelectorAll('tr.clickable').forEach(tr=>tr.onclick=()=>{document.getElementById('drill'+tr.dataset.i).classList.toggle('hidden');});
+}
+function drillHTML(r){
+  const it=ITEMS_BY_KEY[r.bu+'|'+r.itemId]; if(!it)return '';
+  const rows=[]; const months=fyMonths(state.fy);
+  months.forEach(m=>{const d=it.months[m];const lm=it.months[shiftY(m,-1)];if(!d&&!lm)return;
+    const q=d?d.q:0,v=d?d.v:0;const lq=lm?lm.q:0,lv=lm?lm.v:0;
+    const cr=q?v/q:null,lr=lq?lv/lq:null;const sv=(cr!=null&&lr!=null)?(lr-cr)*q:null;
+    const br=r.budRow?budgetRateForMonth(r.budRow,m):null;const bs=(cr!=null&&br!=null)?(br-cr)*q:null;
+    rows.push('<tr><td>'+monLabel(m)+'</td><td class="num">'+fN(q)+'</td><td class="num">'+f2(cr)+'</td><td class="num">'+(lr!=null?f2(lr):'—')+'</td>'+
+      '<td class="num '+cls(sv)+'">'+(sv!=null?sign(sv)+fCr(sv):'—')+'</td><td class="num">'+(br!=null?f2(br):'—')+'</td><td class="num '+cls(bs)+'">'+(bs!=null?sign(bs)+fCr(bs):'—')+'</td></tr>');});
+  return '<div class="drill"><div class="muted small" style="margin-bottom:6px">'+esc(r.name)+' &middot; month breakdown (current FY vs LY)</div>'+
+    '<table><thead><tr><th>Month</th><th class="num">Qty</th><th class="num">Cur rate</th><th class="num">LY rate</th><th class="num">LY saving</th><th class="num">Bud rate</th><th class="num">Bud saving</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>'+
+    '<div class="note small">Transaction-level drill (SBU &rarr; Item &rarr; Month &rarr; Transaction) is available on demand via the agent.</div></div>';
+}
+function renderItems(rows){
+  const list=[...rows].filter(r=>r.cq>0).sort((a,b)=>(b.cv||0)-(a.cv||0));
+  document.getElementById('itemCount').textContent='('+list.length+' items)';
+  document.getElementById('itemTable').innerHTML='<div class="tblwrap" style="max-height:640px"><table><thead><tr>'+
+    '<th>SBU</th><th>Code</th><th>Item</th><th>Type</th><th>Category</th><th class="num">Qty</th><th class="num">Current rate</th><th class="num">Current value</th>'+
+    '<th class="num">LY rate</th><th class="num">LY savings</th><th class="num">Budget rate</th><th class="num">Budget savings</th></tr></thead><tbody>'+
+    list.map(r=>'<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name)+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
+      '<td class="muted small">'+esc(r.cat)+'</td><td class="num">'+fN(r.cq)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+fN(r.cv)+'</td>'+
+      '<td class="num">'+(r.lyRate!=null?f2(r.lyRate):'<span class="pill no">N/A</span>')+'</td>'+
+      '<td class="num '+cls(r.lySav)+'">'+(r.lySav!=null?sign(r.lySav)+fCr(r.lySav):'—')+'</td>'+
+      '<td class="num">'+(r.budRate!=null?f2(r.budRate):'<span class="pill no">No Budget</span>')+'</td>'+
+      '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>').join('')+'</tbody></table></div>';
+}
+function dqTable(items){
+  if(!items.length)return '<div class="muted small">None in current filter.</div>';
+  return '<div class="tblwrap" style="max-height:300px"><table><thead><tr><th>SBU</th><th>Code</th><th>Item</th><th class="num">Qty</th><th class="num">Value</th></tr></thead><tbody>'+
+    items.slice(0,200).map(r=>'<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,52)+'</td><td class="num">'+fN(r.cq)+'</td><td class="num">'+fN(r.cv)+'</td></tr>').join('')+'</tbody></table></div>';
+}
+function renderDQ(rows){
+  const valid=rows.filter(r=>r.cq>0);
+  document.getElementById('dqNoLy').innerHTML=dqTable(valid.filter(r=>r.lySav==null));
+  document.getElementById('dqNoBud').innerHTML=dqTable(valid.filter(r=>r.budSav==null));
+  const matchedKeys={};
+  DATA.items.forEach(it=>{const b=budgetFor(it);if(b){const sc=SBU[it.bu];matchedKeys[sc.code+'|'+norm(b.row.desc)+'|'+(b.row.code?norm(b.row.code):'')]=true;}});
+  const unm=DATA.budget.filter(b=>!matchedKeys[b.sbu+'|'+norm(b.desc)+'|'+(b.code?norm(b.code):'')]);
+  document.getElementById('dqUnmapped').innerHTML=unm.length?('<div class="tblwrap" style="max-height:300px"><table><thead><tr><th>SBU</th><th>Code</th><th>Description</th></tr></thead><tbody>'+
+      unm.map(b=>'<tr><td>'+esc(b.sbu)+'</td><td>'+esc(b.code||'—')+'</td><td style="white-space:normal">'+esc(b.desc)+'</td></tr>').join('')+'</tbody></table></div>'):
+      '<div class="muted small">All budget rows matched to an item.</div>';
+  const dups=BINDEX.dups||[];
+  document.getElementById('dqDup').innerHTML=dups.length?('<div class="tblwrap" style="max-height:300px"><table><thead><tr><th>SBU</th><th>Code</th><th>Description</th></tr></thead><tbody>'+
+      dups.map(b=>'<tr><td>'+esc(b.sbu)+'</td><td>'+esc(b.code||'—')+'</td><td style="white-space:normal">'+esc(b.desc)+'</td></tr>').join('')+'</tbody></table></div>'):
+      '<div class="muted small">No duplicate budget records detected.</div>';
+  const fz=valid.filter(r=>r.budMethod==='fuzzy');
+  document.getElementById('dqFuzzy').innerHTML=fz.length?('<div class="tblwrap" style="max-height:300px"><table><thead><tr><th>SBU</th><th>Item</th><th>Matched budget</th></tr></thead><tbody>'+
+      fz.map(r=>'<tr><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,44)+'</td><td style="white-space:normal">'+esc(r.budRow.desc)+'</td></tr>').join('')+'</tbody></table></div>'):
+      '<div class="muted small">No fuzzy matches in current filter.</div>';
+  const exc=[];
+  exc.push(['RM/PM classification','RM = item type Raw Materials &amp; category <i>Direct Raw Materials</i>; PM = type Packaging Materials, plus ACCL cement bags (typed Raw Materials / In-direct) treated as PM.']);
+  exc.push(['Excluded by design','Finished / Semi-finished / Trading goods, MRO, and Raw Materials category <i>Non RM</i> and <i>In-direct/Indirect Raw Materials</i> are excluded (not direct RM/PM).']);
+  const alel=DATA.sbus.find(s=>s.code==='ALEL');
+  if(alel){const n=DATA.items.filter(i=>i.bu===alel.bu).length; exc.push(['ALEL',n===0?'No direct RM/PM issue-to-shop-floor items found (its shop-floor issues are category <i>Non RM</i>).':n+' direct RM/PM items.']);}
+  const noBudgetSbu=DATA.sbus.filter(s=>!(BINDEX.rowsBySbu[s.code]||[]).length).map(s=>s.code);
+  if(noBudgetSbu.length)exc.push(['SBU without budget rates',noBudgetSbu.join(', ')+' — the budget tab supplies rates only for ACCL, AIL, ARMCL, ABSL, APFIL and AEL; others show &ldquo;No Budget&rdquo;.']);
+  exc.push(['Zero qty',valid.length!==rows.length?(rows.length-valid.length)+' filtered item(s) have no current-period quantity and are excluded from rate-based savings.':'None in current filter.']);
+  document.getElementById('dqCoverage').innerHTML='<table><tbody>'+exc.map(e=>'<tr><td style="white-space:normal;vertical-align:top"><b>'+e[0]+'</b><div class="muted small">'+e[1]+'</div></td></tr>').join('')+'</tbody></table>';
+}
+
+/* ============================ filters ============================ */
+function buildFilterOptions(){
+  const fySel=document.getElementById('fFy');
+  fySel.innerHTML=FYS.map(f=>'<option value="'+f+'">FY '+fyLabel(f)+(f===FYS[0]?' (current)':'')+'</option>').join('');
+  if(state.fy!=null) fySel.value=state.fy;
+  const sbuSel=document.getElementById('fSbu');
+  sbuSel.innerHTML='<option value="">All SBU</option>'+DATA.sbus.map(s=>'<option value="'+s.bu+'">'+s.code+' — '+esc(s.name)+'</option>').join('');
+  sbuSel.value=state.sbu;
+  const cats=[...new Set(DATA.items.map(i=>i.cat))].sort();
+  const catSel=document.getElementById('fCat');
+  catSel.innerHTML='<option value="">All categories</option>'+cats.map(c=>'<option>'+esc(c)+'</option>').join('');
+  catSel.value=state.cat;
+  document.getElementById('fKind').value=state.kind;
+  document.getElementById('fSrc').value=state.src;
+  document.getElementById('fText').value=state.text;
+}
+function refreshMonths(){
+  const av=monthsWithData(state.fy); const sel=document.getElementById('fMonth');
+  sel.innerHTML=av.map(m=>'<option value="'+m+'">'+monLabel(m)+'</option>').join('');
+  if(!state.month||!av.includes(state.month)) state.month=av.length?av[av.length-1]:null;
+  sel.value=state.month||'';
+}
+function initFilters(){
+  document.getElementById('fFy').onchange=e=>{state.fy=parseInt(e.target.value,10);state.month=null;refreshMonths();renderAll();};
+  document.querySelectorAll('#fMode button').forEach(b=>b.onclick=()=>{state.mode=b.dataset.m;document.querySelectorAll('#fMode button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
+  document.getElementById('fSbu').onchange=e=>{state.sbu=e.target.value;renderAll();};
+  document.getElementById('fKind').onchange=e=>{state.kind=e.target.value;renderAll();};
+  document.getElementById('fSrc').onchange=e=>{state.src=e.target.value;renderAll();};
+  document.getElementById('fText').oninput=e=>{state.text=e.target.value;renderAll();};
+  document.getElementById('fCat').onchange=e=>{state.cat=e.target.value;renderAll();};
+  document.getElementById('fMonth').onchange=e=>{state.month=e.target.value;renderAll();};
+  document.getElementById('btnReset').onclick=()=>{state.sbu='';state.kind='';state.cat='';state.src='';state.text='';state.sbuSel='ALL';
+    buildFilterOptions();renderAll();};
+  document.getElementById('btnCsv').onclick=exportCsv;
+  document.getElementById('btnRefresh').onclick=()=>fetchData(false);
+}
+function exportCsv(){
+  const rows=computeItems().filter(r=>r.cq>0);
+  const head=['SBU','ItemCode','ItemName','Type','Category','CurrentQty','CurrentRate','CurrentValue','LYRate','LYSavings','BudgetRate','BudgetSavings'];
+  const lines=[head.join(',')];
+  rows.forEach(r=>{lines.push([r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"',r.kind,'"'+r.cat+'"',r.cq,r.cRate,r.cv,
+    r.lyRate==null?'':r.lyRate,r.lySav==null?'':r.lySav,r.budRate==null?'':r.budRate,r.budSav==null?'':r.budSav].join(','));});
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='COGS_Savings_'+(state.mode==='MTD'?'MTD_':'YTD_')+(state.month||'')+'.csv';
+  document.body.appendChild(a);a.click();a.remove();
+}
+
+/* ============================ boot / refresh ============================ */
+function renderAll(){
+  const rows=computeItems();
+  renderExec(rows); renderSbu(rows); renderItems(rows); renderDQ(rows);
+  document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
+  const warn=document.getElementById('warnBox'); const msgs=[];
+  const alelEmpty=DATA.sbus.some(s=>s.code==='ALEL' && !DATA.items.some(i=>i.bu===s.bu));
+  if(alelEmpty)msgs.push('ALEL has no direct RM/PM issue-to-shop-floor lines (all its shop-floor issues are classified category "Non RM") — see Data Quality.');
+  const noBud=DATA.sbus.filter(s=>!(BINDEX.rowsBySbu[s.code]||[]).length).map(s=>s.code);
+  if(noBud.length)msgs.push('No budget rates for: '+noBud.join(', ')+' (budget tab covers ACCL, AIL, ARMCL, ABSL, APFIL, AEL only).');
+  if(msgs.length){warn.classList.remove('hidden');warn.innerHTML=msgs.map(m=>'&#9888; '+m).join('<br/>');}else warn.classList.add('hidden');
+}
+function setStatus(s){document.getElementById('hdrStatus').textContent=s||'';}
+function fetchData(silent){
+  const bust='data.json?v='+Date.now();
+  setStatus('refreshing…');
+  return fetch(bust,{cache:'no-store'})
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(d=>{ setData(d); syncState(); buildFilterOptions(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
+    .catch(e=>{ setStatus(''); if(!silent) alert('Could not load data.json: '+e.message+'\n(this is normal when opened as a local file - showing the embedded snapshot).'); });
+}
+document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active',x===t));
+  ['exec','sbu','item','dq'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
+  renderAll();
+});
+window.addEventListener('resize',()=>renderAll());
+window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData};
+
+/* boot: show the embedded snapshot immediately, then try to load live data.json */
+setData(window.COGS || {sbus:[],items:[],budget:[]});
+syncState();
+initFilters();
+buildFilterOptions();
+refreshMonths();
+renderAll();
+fetchData(true);
+</script>
+</body>
+</html>
