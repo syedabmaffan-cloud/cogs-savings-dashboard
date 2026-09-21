@@ -4,7 +4,7 @@ Interactive, self-contained savings dashboard for **direct RM/PM issued to the s
 across 10 Akij SBUs, comparing the current issue rate against **Last Year** and the
 **approved procurement budget**.
 
-**Live site (GitHub Pages):** `https://<your-user>.github.io/<repo>/`
+**Live site (GitHub Pages):** https://syedabmaffan-cloud.github.io/cogs-savings-dashboard/
 
 ---
 
