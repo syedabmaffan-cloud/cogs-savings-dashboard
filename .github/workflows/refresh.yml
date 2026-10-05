@@ -34,11 +34,11 @@ jobs:
           COGS_GCLIENT_ID:     ${{ secrets.COGS_GCLIENT_ID }}
           COGS_GCLIENT_SECRET: ${{ secrets.COGS_GCLIENT_SECRET }}
           COGS_GREFRESH:       ${{ secrets.COGS_GREFRESH }}
-        run: ./.opencode/cogs-extract.ps1
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./.opencode/cogs-extract.ps1
 
       - name: Build dashboard
         shell: pwsh
-        run: ./.opencode/cogs-build.ps1
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./.opencode/cogs-build.ps1
 
       - name: Commit refreshed data
         shell: pwsh
