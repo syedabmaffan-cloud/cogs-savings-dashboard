@@ -13,8 +13,8 @@
              https://docs.google.com/spreadsheets/d/17WltMox1pa-GxnbxNGfBVIFVeymy8n-4q7B7M03u9e4
              (monthly BDT budget rate per SBU/item, Jul-2026..Jun-2027).
 
-  The MCP server caps every response at 200 rows, so extraction pages with OFFSET/FETCH.
-  Nothing is ever written back to any database: only SELECT statements are issued.
+  Endpoints cap each response (enterprise-api-gateway 500 rows, legacy 200), so extraction
+  pages with OFFSET/FETCH. Nothing is ever written back: only SELECT statements are issued.
 #>
 [CmdletBinding()]
 param(
@@ -38,12 +38,37 @@ $cfg = $null
 if (Test-Path -LiteralPath $cfgPath) {
   $cfg = (Get-Content -LiteralPath $cfgPath -Raw) -replace '(?m)^\s*//.*$', '' | ConvertFrom-Json
 }
-# secrets resolve from environment first (used by the scheduled GitHub Actions refresh),
-# then from the local opencode config.
-$McpUrl = if ($env:COGS_MCP_URL) { $env:COGS_MCP_URL } elseif ($cfg) { $cfg.mcp.AssetMcpServer.url } else { $null }
-$ApiKey = if ($env:COGS_MCP_KEY) { $env:COGS_MCP_KEY } elseif ($cfg) { $cfg.mcp.AssetMcpServer.headers.'X-API-Key' } else { $null }
-if (-not $McpUrl -or -not $ApiKey) { throw 'MCP url / key not found (set COGS_MCP_URL and COGS_MCP_KEY, or provide opencode.jsonc).' }
-$McpHdr  = @{ 'X-API-Key' = $ApiKey; 'Accept' = 'application/json, text/event-stream'; 'Content-Type' = 'application/json' }
+
+# Resolve the MCP endpoint. Priority:
+#   1. environment (used by the scheduled GitHub Actions refresh): COGS_MCP_URL + COGS_MCP_KEY
+#   2. opencode config: enterprise-api-gateway (current) -> JSON rows, 500/page
+#   3. opencode config: AssetMcpServer (legacy) -> markdown rows, 200/page
+$ep = $null
+if ($env:COGS_MCP_URL -and $env:COGS_MCP_TOKEN) {
+  # enterprise-api-gateway style: bearer token, JSON rows, 500/page
+  $ep = [pscustomobject]@{ url=$env:COGS_MCP_URL
+    headers=@{ 'Authorization'=("Bearer " + $env:COGS_MCP_TOKEN); 'Accept'='application/json, text/event-stream'; 'Content-Type'='application/json' }
+    tool='execute_readonly_query'; arg='sql'; format='json'; page=500 }
+} elseif ($env:COGS_MCP_URL -and $env:COGS_MCP_KEY) {
+  # legacy style: X-API-Key, markdown rows, 200/page
+  $ep = [pscustomobject]@{ url=$env:COGS_MCP_URL
+    headers=@{ 'X-API-Key'=$env:COGS_MCP_KEY; 'Accept'='application/json, text/event-stream'; 'Content-Type'='application/json' }
+    tool='ExecuteReadOnlyQueryAsync'; arg='sqlQuery'; format='md'; page=200 }
+} elseif ($cfg -and ($cfg.mcp.PSObject.Properties.Name -contains 'enterprise-api-gateway')) {
+  $g = $cfg.mcp.'enterprise-api-gateway'
+  $ep = [pscustomobject]@{ url=$g.url
+    headers=@{ 'Authorization'=$g.headers.Authorization; 'Accept'='application/json, text/event-stream'; 'Content-Type'='application/json' }
+    tool='execute_readonly_query'; arg='sql'; format='json'; page=500 }
+} elseif ($cfg -and ($cfg.mcp.PSObject.Properties.Name -contains 'AssetMcpServer')) {
+  $g = $cfg.mcp.AssetMcpServer
+  $ep = [pscustomobject]@{ url=$g.url
+    headers=@{ 'X-API-Key'=$g.headers.'X-API-Key'; 'Accept'='application/json, text/event-stream'; 'Content-Type'='application/json' }
+    tool='ExecuteReadOnlyQueryAsync'; arg='sqlQuery'; format='md'; page=200 }
+}
+if (-not $ep) { throw 'No MCP endpoint resolved (set COGS_MCP_URL + COGS_MCP_TOKEN, or provide opencode.jsonc with enterprise-api-gateway).' }
+$McpUrl = $ep.url; $McpHdr = $ep.headers; $McpTool = $ep.tool; $McpArg = $ep.arg; $McpFormat = $ep.format
+if (-not $PSBoundParameters.ContainsKey('PageSize')) { $PageSize = $ep.page }
+Write-Host ("[cogs] MCP {0}  tool={1}  format={2}  page={3}" -f $McpUrl, $McpTool, $McpFormat, $PageSize)
 
 # ---------------------------------------------------------------- SBU scope
 # Requested SBU code -> iBOSDDD business unit id.
@@ -65,14 +90,26 @@ $BuList = ($Sbus | ForEach-Object { $_.bu }) -join ','
 
 # ---------------------------------------------------------------- helpers
 function Invoke-McpQuery([string]$Sql) {
+  $qargs = @{ $McpArg = $Sql; limit = [Math]::Min($PageSize, $ep.page) }
   $body = @{ jsonrpc = '2.0'; id = 1; method = 'tools/call';
-             params = @{ name = 'ExecuteReadOnlyQueryAsync'; arguments = @{ sqlQuery = $Sql; limit = 200 } } } |
-          ConvertTo-Json -Depth 8
+             params = @{ name = $McpTool; arguments = $qargs } } | ConvertTo-Json -Depth 8
   for ($try = 1; $try -le 3; $try++) {
     try {
       $resp = Invoke-RestMethod -Method Post -Uri $McpUrl -Headers $McpHdr -Body $body -TimeoutSec 240
       if ($resp.result.isError) { throw ("MCP error: " + $resp.result.content[0].text) }
-      return $resp.result.content[0].text
+      $text = $resp.result.content[0].text
+      if ($McpFormat -eq 'json') {
+        $obj = $text | ConvertFrom-Json
+        $out = New-Object System.Collections.Generic.List[object]
+        $props = $null
+        foreach ($r in $obj.rows) {
+          if (-not $props) { $props = $r.PSObject.Properties.Name }
+          $cells = @(); foreach ($cn in $props) { $cells += "$($r.$cn)" }
+          $out.Add($cells)
+        }
+        return ,$out
+      }
+      return ,(ConvertTo-MdRows $text)
     } catch {
       if ($try -eq 3) { throw }
       Start-Sleep -Seconds (2 * $try)
@@ -133,70 +170,70 @@ $SectionSbu = @{
 # ================================================================ 1. ACTUALS
 Write-Host '[cogs] extracting direct RM/PM issue-to-shop-floor actuals from MCP ...'
 
-$innerBase = @"
-SELECT t.BU, t.ItemId, t.Code, t.Name, t.Kind, t.Cat, MAX(t.Uom) AS Uom,
-       STRING_AGG(CONCAT(t.Pd,'~',CAST(t.Qty AS varchar(40)),'~',CAST(t.Val AS varchar(40))),';')
-         WITHIN GROUP (ORDER BY t.Pd) AS Months
-FROM (
-  SELECT h.intBusinessUnitId AS BU, r.intItemId AS ItemId, i.strItemCode AS Code,
-         REPLACE(REPLACE(REPLACE(i.strItemName,'|','/'),CHAR(10),' '),'~','-') AS Name,
-         CASE WHEN i.strItemTypeName='Packaging Materials' OR i.strItemName LIKE '%Cement Bag%'
-              THEN 'PM' ELSE 'RM' END AS Kind,
-         i.strItemCategoryName AS Cat, MAX(r.strUoMName) AS Uom,
-         CONVERT(char(7), h.dteTransactionDate, 120) AS Pd,
-         CAST(SUM(ABS(CAST(r.numTransactionQuantity AS decimal(28,4)))) AS decimal(28,2)) AS Qty,
-         CAST(SUM(ABS(CAST(r.monTransactionValue  AS decimal(28,2)))) AS decimal(28,2)) AS Val
-  FROM wms.tblInventoryTransactionHeader h WITH (NOLOCK)
-  JOIN wms.tblInventoryTransactionRow r WITH (NOLOCK) ON r.intInventoryTransactionId = h.intInventoryTransactionId
-  JOIN itm.tblItem i WITH (NOLOCK) ON i.intItemId = r.intItemId
-  WHERE h.intBusinessUnitId IN ($BuList)
-    AND h.TransactionGroupName = 'Issue Inventory'
-    AND h.strTransactionTypeName IN ('Issue For ShopFloor','Issue For Shop Floor')
-    AND h.isActive = 1 AND r.isActive = 1
-    AND h.dteTransactionDate >= '2025-07-01'
-    AND ( i.strItemCategoryName LIKE 'Direct Raw Material%'
-          OR i.strItemTypeName = 'Packaging Materials'
-          OR i.strItemName LIKE '%Cement Bag%' )
-  GROUP BY h.intBusinessUnitId, r.intItemId, i.strItemCode, i.strItemName, i.strItemTypeName,
-           i.strItemCategoryName, CONVERT(char(7), h.dteTransactionDate, 120)
-) t
-GROUP BY t.BU, t.ItemId, t.Code, t.Name, t.Kind, t.Cat
+$baseSql = @"
+SELECT h.intBusinessUnitId AS BU, r.intItemId AS ItemId, i.strItemCode AS Code,
+       i.strItemCategoryName AS Cat,
+       CASE WHEN i.strItemTypeName='Packaging Materials' OR i.strItemName LIKE '%Cement Bag%'
+            THEN 'PM' ELSE 'RM' END AS Kind,
+       MAX(r.strUoMName) AS Uom,
+       CONVERT(char(7), h.dteTransactionDate, 120) AS Pd,
+       CAST(SUM(ABS(CAST(r.numTransactionQuantity AS decimal(28,4)))) AS decimal(28,2)) AS Qty,
+       CAST(SUM(ABS(CAST(r.monTransactionValue  AS decimal(28,2)))) AS decimal(28,2)) AS Val
+FROM wms.tblInventoryTransactionHeader h WITH (NOLOCK)
+JOIN wms.tblInventoryTransactionRow r WITH (NOLOCK) ON r.intInventoryTransactionId = h.intInventoryTransactionId
+JOIN itm.tblItem i WITH (NOLOCK) ON i.intItemId = r.intItemId
+WHERE h.intBusinessUnitId IN ($BuList)
+  AND h.TransactionGroupName = 'Issue Inventory'
+  AND ( h.strTransactionTypeName = 'Issue For ShopFloor' OR h.strTransactionTypeName = 'Issue For Shop Floor' )
+  AND h.isActive = 1 AND r.isActive = 1
+  AND h.dteTransactionDate >= '2025-07-01'
+  AND ( i.strItemCategoryName LIKE 'Direct Raw Material%'
+        OR i.strItemTypeName = 'Packaging Materials'
+        OR i.strItemName LIKE '%Cement Bag%' )
+GROUP BY h.intBusinessUnitId, r.intItemId, i.strItemCode, i.strItemCategoryName, i.strItemTypeName, i.strItemName,
+         CONVERT(char(7), h.dteTransactionDate, 120)
 "@
 
 $items    = New-Object System.Collections.Generic.List[object]
+$byKey    = @{}   # 'bu|itemId' -> item object
 $offset   = 0
 $page     = 0
 $maxMonth = ''
 while ($true) {
-  $sql = "SELECT BU, ItemId, Code, Name, Kind, Cat, Uom, Months FROM ( $innerBase ) x ORDER BY BU, ItemId OFFSET $offset ROWS FETCH NEXT $PageSize ROWS ONLY"
-  $text = Invoke-McpQuery $sql
-  $rows = ConvertTo-MdRows $text
+  $sql = "$baseSql ORDER BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate, 120) OFFSET $offset ROWS FETCH NEXT $PageSize ROWS ONLY"
+  $rows = Invoke-McpQuery $sql
   if ($rows.Count -eq 0) { break }
   foreach ($c in $rows) {
-    if ($c.Count -lt 8) { continue }
-    $months = @{}
-    foreach ($seg in ("$($c[7])" -split ';')) {
-      if (-not $seg) { continue }
-      $p = $seg -split '~'
-      if ($p.Count -lt 3) { continue }
-      $mm = $p[0]
-      $q  = ToNum $p[1]
-      $v  = ToNum $p[2]
-      if ($q -eq $null -and $v -eq $null) { continue }
-      if ($months.ContainsKey($mm)) { $months[$mm] = @{ q = $months[$mm].q + [double]$q; v = $months[$mm].v + [double]$v } }
-      else { $months[$mm] = @{ q = [double]$q; v = [double]$v } }
-      if ($mm -gt $maxMonth) { $maxMonth = $mm }
+    if ($c.Count -lt 9) { continue }
+    $bu = [int]$c[0]; $iid = [int]$c[1]; $key = "$bu|$iid"
+    if (-not $byKey.ContainsKey($key)) {
+      $it = [pscustomobject]@{ bu = $bu; itemId = $iid; code = "$($c[2])"; name = ''
+                               kind = "$($c[4])"; cat = "$($c[3])"; uom = "$($c[5])"; months = @{} }
+      $byKey[$key] = $it; $items.Add($it)
     }
-    $items.Add([pscustomobject]@{
-      bu = [int]$c[0]; itemId = [int]$c[1]; code = "$($c[2])"; name = "$($c[3])"
-      kind = "$($c[4])"; cat = "$($c[5])"; uom = "$($c[6])"; months = $months
-    })
+    $mm = "$($c[6])"
+    $q = ToNum $c[7]; $v = ToNum $c[8]
+    if ($null -eq $q) { $q = 0 }; if ($null -eq $v) { $v = 0 }
+    $byKey[$key].months[$mm] = @{ q = [double]$q; v = [double]$v }
+    if ($mm -gt $maxMonth) { $maxMonth = $mm }
   }
   $page++
-  Write-Host ("[cogs]   page {0}: {1} rows (total {2})" -f $page, $rows.Count, $items.Count)
+  Write-Host ("[cogs]   page {0}: {1} rows (items so far {2})" -f $page, $rows.Count, $items.Count)
   if ($rows.Count -lt $PageSize) { break }
   $offset += $PageSize
 }
+
+# Resolve item names separately. The gateway's SQL rewriter returns 502 for the (Name + GROUP BY +
+# ORDER BY/OFFSET) combination, so names are fetched by item id in chunks instead.
+$ids = @($items | ForEach-Object { $_.itemId } | Sort-Object -Unique)
+$nameMap = @{}
+for ($i = 0; $i -lt $ids.Count; $i += 300) {
+  $last  = [Math]::Min($i + 299, $ids.Count - 1)
+  $chunk = ($ids[$i..$last]) -join ','
+  $nrows = Invoke-McpQuery "SELECT intItemId, strItemName FROM itm.tblItem WITH (NOLOCK) WHERE intItemId IN ($chunk)"
+  foreach ($n in $nrows) { if ($n.Count -ge 2) { $nameMap[[int]$n[0]] = "$($n[1])" } }
+}
+foreach ($it in $items) { if ($nameMap.ContainsKey($it.itemId)) { $it.name = $nameMap[$it.itemId] } }
 Write-Host ("[cogs] actuals: {0} items, latest month {1}" -f $items.Count, $maxMonth)
 
 # ================================================================ 2. BUDGET

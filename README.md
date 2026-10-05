@@ -27,7 +27,8 @@ rebuilding the page. There is also a **↻ Refresh data** button in the page.
 
 **Automatic** — `.github/workflows/refresh.yml` runs daily (and on demand via *Actions → Run workflow*),
 re-extracts from the MCP server + Google Sheet and commits `docs/`. Pages redeploys automatically.
-Requires repo secrets: `COGS_MCP_URL`, `COGS_MCP_KEY`, `COGS_GCLIENT_ID`, `COGS_GCLIENT_SECRET`, `COGS_GREFRESH`.
+Requires repo secrets: `COGS_MCP_URL` + `COGS_MCP_TOKEN` (enterprise-api-gateway bearer token),
+`COGS_GCLIENT_ID`, `COGS_GCLIENT_SECRET`, `COGS_GREFRESH`. (Use `COGS_MCP_KEY` instead of `COGS_MCP_TOKEN` for the legacy `X-API-Key` endpoint.)
 
 **Manual** —
 ```powershell
