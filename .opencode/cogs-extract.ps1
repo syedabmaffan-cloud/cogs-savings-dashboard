@@ -96,6 +96,7 @@ function Invoke-McpQuery([string]$Sql) {
   for ($try = 1; $try -le 3; $try++) {
     try {
       $resp = Invoke-RestMethod -Method Post -Uri $McpUrl -Headers $McpHdr -Body $body -TimeoutSec 240
+      if ($null -eq $resp.result) { throw 'MCP endpoint returned a non-JSON response (service unavailable / 502).' }
       if ($resp.result.isError) { throw ("MCP error: " + $resp.result.content[0].text) }
       $text = $resp.result.content[0].text
       if ($McpFormat -eq 'json') {
