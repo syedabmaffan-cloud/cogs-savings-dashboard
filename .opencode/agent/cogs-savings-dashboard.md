@@ -53,7 +53,10 @@ FY(y) = **July y → June y+1**. Current FY = **2026-27**; LY = **2025-26**.
 
 ## 4. Actuals source (direct RM/PM issue to shop floor)
 Tables: `wms.tblInventoryTransactionHeader` (h) + `wms.tblInventoryTransactionRow` (r) + `itm.tblItem` (i).
-- `h.TransactionGroupName = 'Issue Inventory'` **and** `h.strTransactionTypeName IN ('Issue For ShopFloor','Issue For Shop Floor')` (two spellings exist).
+- `h.TransactionGroupName = 'Issue Inventory'` **and** shop-floor issue type — two spellings exist
+  (`Issue For ShopFloor`, `Issue For Shop Floor`). On the enterprise-api-gateway use
+  **`h.strTransactionTypeName LIKE 'Issue%Shop%'`** (matches both, excludes Delivery/Cost Center/
+  Maintenance/Project); the gateway's SQL rewriter mangles an `OR`/`IN` on this column.
 - Business unit in the 10-BU list; `h.isActive=1 AND r.isActive=1`; date ≥ 2025-07-01.
 - Issues are stored **negative**: `qty = ABS(r.numTransactionQuantity)`, `value = ABS(r.monTransactionValue)`, `rate = value / qty`.
 - **RM/PM classification (direct only):**

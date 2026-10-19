@@ -93,7 +93,7 @@ function Invoke-McpQuery([string]$Sql) {
   $qargs = @{ $McpArg = $Sql; limit = [Math]::Min($PageSize, $ep.page) }
   $body = @{ jsonrpc = '2.0'; id = 1; method = 'tools/call';
              params = @{ name = $McpTool; arguments = $qargs } } | ConvertTo-Json -Depth 8
-  for ($try = 1; $try -le 3; $try++) {
+  for ($try = 1; $try -le 5; $try++) {
     try {
       $resp = Invoke-RestMethod -Method Post -Uri $McpUrl -Headers $McpHdr -Body $body -TimeoutSec 240
       if ($null -eq $resp.result) { throw 'MCP endpoint returned a non-JSON response (service unavailable / 502).' }
@@ -173,10 +173,9 @@ Write-Host '[cogs] extracting direct RM/PM issue-to-shop-floor actuals from MCP 
 
 $baseSql = @"
 SELECT h.intBusinessUnitId AS BU, r.intItemId AS ItemId, i.strItemCode AS Code,
-       i.strItemCategoryName AS Cat,
        CASE WHEN i.strItemTypeName='Packaging Materials' OR i.strItemName LIKE '%Cement Bag%'
             THEN 'PM' ELSE 'RM' END AS Kind,
-       MAX(r.strUoMName) AS Uom,
+       i.strItemCategoryName AS Cat, MAX(r.strUoMName) AS Uom,
        CONVERT(char(7), h.dteTransactionDate, 120) AS Pd,
        CAST(SUM(ABS(CAST(r.numTransactionQuantity AS decimal(28,4)))) AS decimal(28,2)) AS Qty,
        CAST(SUM(ABS(CAST(r.monTransactionValue  AS decimal(28,2)))) AS decimal(28,2)) AS Val
@@ -185,14 +184,14 @@ JOIN wms.tblInventoryTransactionRow r WITH (NOLOCK) ON r.intInventoryTransaction
 JOIN itm.tblItem i WITH (NOLOCK) ON i.intItemId = r.intItemId
 WHERE h.intBusinessUnitId IN ($BuList)
   AND h.TransactionGroupName = 'Issue Inventory'
-  AND ( h.strTransactionTypeName = 'Issue For ShopFloor' OR h.strTransactionTypeName = 'Issue For Shop Floor' )
+  AND h.strTransactionTypeName LIKE 'Issue%Shop%'
   AND h.isActive = 1 AND r.isActive = 1
   AND h.dteTransactionDate >= '2025-07-01'
   AND ( i.strItemCategoryName LIKE 'Direct Raw Material%'
         OR i.strItemTypeName = 'Packaging Materials'
         OR i.strItemName LIKE '%Cement Bag%' )
-GROUP BY h.intBusinessUnitId, r.intItemId, i.strItemCode, i.strItemCategoryName, i.strItemTypeName, i.strItemName,
-         CONVERT(char(7), h.dteTransactionDate, 120)
+GROUP BY h.intBusinessUnitId, r.intItemId, i.strItemCode, i.strItemName, i.strItemTypeName,
+         i.strItemCategoryName, CONVERT(char(7), h.dteTransactionDate, 120)
 "@
 
 $items    = New-Object System.Collections.Generic.List[object]
@@ -209,7 +208,7 @@ while ($true) {
     $bu = [int]$c[0]; $iid = [int]$c[1]; $key = "$bu|$iid"
     if (-not $byKey.ContainsKey($key)) {
       $it = [pscustomobject]@{ bu = $bu; itemId = $iid; code = "$($c[2])"; name = ''
-                               kind = "$($c[4])"; cat = "$($c[3])"; uom = "$($c[5])"; months = @{} }
+                               kind = "$($c[3])"; cat = "$($c[4])"; uom = "$($c[5])"; months = @{} }
       $byKey[$key] = $it; $items.Add($it)
     }
     $mm = "$($c[6])"
