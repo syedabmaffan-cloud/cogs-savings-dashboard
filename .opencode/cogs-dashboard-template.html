@@ -126,13 +126,13 @@
   <section id="tab-sbu" class="hidden">
     <div class="card"><h3>Select SBU</h3><div class="sbuSel" id="sbuSel"></div></div>
     <div class="kpis" id="kpisSbu"></div>
+    <div class="card"><h3>Item Drill-down <span class="sub">(click a row for month breakdown)</span></h3><div id="sbuItems"></div></div>
     <div class="grid2">
       <div class="card"><h3>Current vs LY vs Budget <span class="sub">(rate &amp; value)</span></h3><div id="sbuCmp"></div></div>
-      <div class="card"><h3 id="sbuTrendTitle">Monthly Trend</h3><canvas id="cvTrendSbu" height="230"></canvas>
+      <div class="card"><h3 id="sbuTrendTitle">Monthly Trend</h3><canvas id="cvTrendSbu" height="200"></canvas>
         <div class="legend"><span><i style="background:#4f8cff"></i>Current value</span><span><i style="background:#25b06b"></i>LY savings</span><span><i style="background:#e0a126"></i>Budget savings</span></div>
       </div>
     </div>
-    <div class="card"><h3>Item Drill-down <span class="sub">(click a row for month breakdown)</span></h3><div id="sbuItems"></div></div>
   </section>
 
   <section id="tab-item" class="hidden">
@@ -275,7 +275,11 @@ function totals(rows){
 }
 
 /* ============================ charts ============================ */
-function mount(cv){const dpr=window.devicePixelRatio||1;const w=cv.clientWidth||600;const h=cv.height||220;cv.width=w*dpr;cv.height=h*dpr;const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);return {x,w,h};}
+function mount(cv){const dpr=window.devicePixelRatio||1;const w=cv.clientWidth||600;
+  if(!cv.dataset.h){cv.dataset.h=String(cv.height||220);}
+  const h=parseInt(cv.dataset.h,10)||220;
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);return {x,w,h};}
 function lineChart(cv,labels,series){
   const {x,w,h}=mount(cv); const padL=54,padR=12,padT=12,padB=30; const iw=w-padL-padR, ih=h-padT-padB;
   let max=0,min=0; series.forEach(s=>s.values.forEach(v=>{if(v==null)return;if(v>max)max=v;if(v<min)min=v;}));
@@ -296,7 +300,7 @@ function kpiHTML(t){
     ['Total RM/PM Qty',fN(t.cq),t.nItems+' items ('+t.nRM+' RM / '+t.nPM+' PM)',''],
     ['Total Issue Value',fCr(t.cv),'BDT '+fN(t.cv),''],
     ['Average RM/PM Rate',f2(t.rate),'per unit',''],
-    ['LY Savings',sign(t.lySav)+fCr(t.lySav),'LY savings %: '+fPct(t.lyPct),cls(t.lySav)],
+    ['LY Impact',sign(t.lySav)+fCr(t.lySav),'LY savings %: '+fPct(t.lyPct),cls(t.lySav)],
     ['Budget Savings',sign(t.budSav)+fCr(t.budSav),'Budget savings %: '+fPct(t.budPct),cls(t.budSav)],
     ['Adverse Impact (LY)',fCr(t.advLy),'sum of negative LY savings','neg'],
     ['Items w/o LY rate',fN(t.noLy),'see Data Quality',t.noLy?'neu':''],
