@@ -89,6 +89,19 @@
   .mrat tbody tr:hover td{background:#1b2438}
   .mrat tfoot td{position:sticky;bottom:0;background:var(--panel2);font-weight:700;border-top:2px solid var(--acc);z-index:3}
   .mrat tfoot td.sticky-l{background:var(--panel2);z-index:6}
+  .ms{position:relative;min-width:135px}
+  .ms-btn{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px;padding:6px 9px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt);font-size:12.5px;cursor:pointer}
+  .ms-btn:after{content:'\25BE';color:var(--mut)}
+  .ms-panel{position:absolute;z-index:60;top:calc(100% + 4px);left:0;min-width:220px;max-height:300px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;display:none;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+  .ms.open .ms-panel{display:block}
+  .ms-panel label{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:5px;cursor:pointer;white-space:nowrap;font-size:12.5px;color:var(--txt)}
+  .ms-panel label:hover{background:#22304d}
+  .ms-panel input{accent-color:var(--acc)}
+  .mrat th.sbu-col,.mrat td.sbu-col{position:sticky;left:0;width:62px;min-width:62px;max-width:62px;background:var(--panel);z-index:5;text-align:left;color:var(--acc);font-weight:700}
+  .mrat th.sbu-col{top:0;z-index:7}
+  .mrat th.item-col,.mrat td.item-col{position:sticky;left:62px;width:280px;min-width:280px;max-width:280px;background:var(--panel);z-index:4;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mrat th.item-col{top:0;z-index:6}
+  .mrat tfoot td.sbu-col,.mrat tfoot td.item-col{background:var(--panel2)}
 </style>
 </head>
 <body>
@@ -116,10 +129,10 @@
       <div class="seg" id="fMode"><button data-m="YTD" class="active">YTD</button><button data-m="MTD">MTD</button></div>
     </div>
     <div class="fld"><label>Reporting Month</label><select id="fMonth"></select></div>
-    <div class="fld"><label>SBU</label><select id="fSbu"></select></div>
-    <div class="fld"><label>RM / PM</label><select id="fKind"><option value="">All</option><option>RM</option><option>PM</option></select></div>
-    <div class="fld"><label>Item Category</label><select id="fCat"></select></div>
-    <div class="fld"><label>Source</label><select id="fSrc"><option value="">All</option><option>Local</option><option>Import</option><option>n/a</option></select></div>
+    <div class="fld"><label>SBU</label><div class="ms" id="msSbu"></div></div>
+    <div class="fld"><label>RM / PM</label><div class="ms" id="msKind"></div></div>
+    <div class="fld"><label>Item Category</label><div class="ms" id="msCat"></div></div>
+    <div class="fld"><label>Source</label><div class="ms" id="msSrc"></div></div>
     <div class="fld"><label>Search item</label><input type="text" id="fText" placeholder="code or name" /></div>
     <button id="btnReset">Reset</button>
     <span style="flex:1"></span>
@@ -171,6 +184,8 @@
       <div class="card"><h3>Fuzzy-matched budget <span class="sub">(verify these)</span></h3><div id="dqFuzzy"></div></div>
       <div class="card"><h3>Coverage &amp; classification exceptions</h3><div id="dqCoverage"></div></div>
     </div>
+  </section>
+
   <section id="tab-monthly" class="hidden">
     <div class="card">
       <div class="flexhead">
@@ -178,6 +193,7 @@
         <div class="fld-row">
           <div class="fld"><label>From month</label><select id="mFrom"></select></div>
           <div class="fld"><label>To month</label><select id="mTo"></select></div>
+          <div class="fld"><label>Metric</label><select id="mMetric"><option value="all">All (Qty · Value · Rate)</option><option value="qty">Quantity</option><option value="value">Value</option><option value="rate" selected>Rate</option></select></div>
         </div>
       </div>
       <div id="mratSummary" class="mrat-sum"></div>
@@ -226,7 +242,7 @@ let BINDEX={byKey:{},rowsBySbu:{},dups:[]};
 let FYS=[];
 let ASOF=null;
 let DATA_MONTHS=new Set();
-const state={fy:null,mode:'YTD',month:null,sbu:'',kind:'',cat:'',src:'',text:'',sbuSel:'ALL'};
+const state={fy:null,mode:'YTD',month:null,sbu:[],kind:[],cat:[],src:[],text:'',sbuSel:'ALL'};
 
 function setData(d){
   DATA = (d && d.items) ? d : {sbus:[],items:[],budget:[]};
@@ -278,11 +294,11 @@ function computeItems(){
   const months=periodMonths(); const out=[];
   DATA.items.forEach(it=>{
     const sc=SBU[it.bu]; if(!sc) return;
-    if(state.sbu && it.bu!==parseInt(state.sbu,10)) return;
-    if(state.kind && it.kind!==state.kind) return;
-    if(state.cat && it.cat!==state.cat) return;
+    if(state.sbu.length && !state.sbu.includes(it.bu)) return;
+    if(state.kind.length && !state.kind.includes(it.kind)) return;
+    if(state.cat.length && !state.cat.includes(it.cat)) return;
     if(state.text && !(it.name+' '+it.code).toUpperCase().includes(state.text.toUpperCase())) return;
-    if(state.src && srcOf(it.name)!==state.src) return;
+    if(state.src.length && !state.src.includes(srcOf(it.name))) return;
     const ly=sumItem(it,months,true), cur=sumItem(it,months,false);
     const bud=budgetFor(it); const br=bud?budgetRate(bud.row,months):null;
     const r={bu:it.bu,itemId:it.itemId,sbu:sc.code,sbuName:sc.name,code:it.code,name:it.name,kind:it.kind,cat:it.cat,uom:it.uom,
@@ -474,7 +490,7 @@ function renderDQ(rows){
 }
 
 /* ============================ monthly rate analysis ============================ */
-const MRAT={from:null,to:null};
+const MRAT={from:null,to:null,metric:'rate'};
 function allMonthsSorted(){const s=new Set();DATA.items.forEach(it=>Object.keys(it.months).forEach(m=>s.add(m)));return [...s].sort();}
 function monthsBetween(a,b){if(!a||!b)return [];const out=[];const e=b.split('-').map(Number);let y=+a.split('-')[0],m=+a.split('-')[1],g=0;while((y<e[0]||(y===e[0]&&m<=e[1]))&&g++<600){out.push(ym(y,m));if(++m>12){m=1;y++;}}return out;}
 function initMonthlyControls(){
@@ -487,15 +503,16 @@ function initMonthlyControls(){
   if(MRAT.from>MRAT.to)MRAT.from=MRAT.to;
   const opts=months.map(m=>'<option value="'+m+'">'+monLabel(m)+'</option>').join('');
   f.innerHTML=opts; t.innerHTML=opts; f.value=MRAT.from; t.value=MRAT.to;
+  const mm=document.getElementById('mMetric'); if(mm) mm.value=MRAT.metric||'rate';
 }
 function monthlyItems(){
   const list=[];
   DATA.items.forEach(it=>{
     const sc=SBU[it.bu]; if(!sc)return;
-    if(state.sbu && it.bu!==parseInt(state.sbu,10))return;
-    if(state.kind && it.kind!==state.kind)return;
-    if(state.cat && it.cat!==state.cat)return;
-    if(state.src && srcOf(it.name)!==state.src)return;
+    if(state.sbu.length && !state.sbu.includes(it.bu))return;
+    if(state.kind.length && !state.kind.includes(it.kind))return;
+    if(state.cat.length && !state.cat.includes(it.cat))return;
+    if(state.src.length && !state.src.includes(srcOf(it.name)))return;
     if(state.text && !(it.name+' '+it.code).toUpperCase().includes(state.text.toUpperCase()))return;
     list.push(it);
   });
@@ -504,58 +521,95 @@ function monthlyItems(){
 function renderMonthly(){
   const wrap=document.getElementById('mratTable'); if(!wrap)return;
   const sum=document.getElementById('mratSummary');
-  const months=monthsBetween(MRAT.from,MRAT.to);
-  if(!months.length){wrap.innerHTML='<div class="muted small" style="padding:10px">Choose a valid From/To month range.</div>';if(sum)sum.innerHTML='';return;}
-  const rows=[]; let tq=0,tv=0;
-  monthlyItems().forEach(it=>{
-    const cells=months.map(m=>{const d=it.months[m];const q=d?d.q:0;const v=d?d.v:0;return {q:q,v:v,r:q?v/q:null};});
-    const rq=cells.reduce((a,c)=>a+c.q,0), rv=cells.reduce((a,c)=>a+c.v,0);
-    if(rq===0 && rv===0) return;
-    tq+=rq; tv+=rv;
-    rows.push({it:it,cells:cells,rq:rq,rv:rv});
-  });
-  rows.sort((a,b)=> b.rv-a.rv);
-  const overall=tq?tv/tq:null;
-  if(sum){
-    sum.innerHTML='<div class="m"><div class="l">Total Quantity</div><div class="v">'+fQ(tq)+'</div><div class="s">'+months.length+' months</div></div>'+
-      '<div class="m"><div class="l">Total Value</div><div class="v">'+fN(tv)+'</div><div class="s">BDT &middot; '+fCr(tv)+'</div></div>'+
-      '<div class="m"><div class="l">Overall Rate</div><div class="v">'+(overall!=null?f2(overall):'—')+'</div><div class="s">Total Value &divide; Total Qty</div></div>'+
-      '<div class="m"><div class="l">Items</div><div class="v">'+rows.length+'</div><div class="s">with activity in range</div></div>';
-  }
-  const showSbu=!state.sbu;
-  let h1='<tr><th class="sticky-l" rowspan="2" style="text-align:left">Item</th>';
-  let h2='<tr>';
-  months.forEach(m=>{h1+='<th colspan="3">'+monLabel(m)+'</th>';h2+='<th class="num">Qty</th><th class="num">Value</th><th class="num">Rate</th>';});
-  h1+='</tr>'; h2+='</tr>';
-  let body='';
-  rows.forEach(r=>{
-    const sc=SBU[r.it.bu];
-    body+='<tr><td class="sticky-l"><span class="muted small">'+esc(r.it.code)+'</span> '+esc(r.it.name)+(showSbu?' <span class="pill">'+esc(sc.code)+'</span>':'')+'</td>';
-    r.cells.forEach(c=>{
-      body+='<td class="num">'+(c.q?fQ(c.q):'')+'</td><td class="num">'+(c.v?fN(c.v):'')+'</td><td class="num">'+(c.r!=null?f2(c.r):'')+'</td>';
+  try{
+    const months=monthsBetween(MRAT.from,MRAT.to);
+    if(!months.length){wrap.innerHTML='<div class="muted small" style="padding:10px">Choose a valid From/To month range.</div>';if(sum)sum.innerHTML='';return;}
+    const metric=MRAT.metric||'rate';
+    const showQ=(metric==='all'||metric==='qty'), showV=(metric==='all'||metric==='value'), showR=(metric==='all'||metric==='rate');
+    const ncol=(showQ?1:0)+(showV?1:0)+(showR?1:0)||1;
+    const rows=[]; let tq=0,tv=0;
+    monthlyItems().forEach(it=>{
+      const cells=months.map(m=>{const d=it.months[m];const q=d?d.q:0;const v=d?d.v:0;return {q:q,v:v,r:q?v/q:null};});
+      const rq=cells.reduce((a,c)=>a+c.q,0), rv=cells.reduce((a,c)=>a+c.v,0);
+      if(rq===0 && rv===0) return;
+      tq+=rq; tv+=rv;
+      rows.push({it:it,cells:cells,rq:rq,rv:rv});
     });
-    body+='</tr>';
-  });
-  let foot='<tr><td class="sticky-l">TOTAL &middot; '+rows.length+' items</td>';
-  months.forEach((m,i)=>{let mq=0,mv=0;rows.forEach(r=>{mq+=r.cells[i].q;mv+=r.cells[i].v;});foot+='<td class="num">'+(mq?fQ(mq):'')+'</td><td class="num">'+(mv?fN(mv):'')+'</td><td class="num"></td>';});
-  foot+='</tr>';
-  wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody><tfoot>'+foot+'</tfoot></table>';
+    rows.sort((a,b)=> b.rv-a.rv);
+    const overall=tq?tv/tq:null;
+    if(sum){
+      sum.innerHTML='<div class="m"><div class="l">Total Quantity</div><div class="v">'+fQ(tq)+'</div><div class="s">'+months.length+' months</div></div>'+
+        '<div class="m"><div class="l">Total Value</div><div class="v">'+fN(tv)+'</div><div class="s">BDT &middot; '+fCr(tv)+'</div></div>'+
+        '<div class="m"><div class="l">Overall Rate</div><div class="v">'+(overall!=null?f2(overall):'—')+'</div><div class="s">Total Value &divide; Total Qty</div></div>'+
+        '<div class="m"><div class="l">Items</div><div class="v">'+rows.length+'</div><div class="s">with activity in range</div></div>';
+    }
+    let h1='<tr><th class="sbu-col" rowspan="2">SBU</th><th class="item-col" rowspan="2">Item</th>';
+    let h2='<tr>';
+    months.forEach(m=>{h1+='<th colspan="'+ncol+'">'+monLabel(m)+'</th>';
+      if(showQ)h2+='<th class="num">Qty</th>'; if(showV)h2+='<th class="num">Value</th>'; if(showR)h2+='<th class="num">Rate</th>';});
+    h1+='</tr>'; h2+='</tr>';
+    let body='';
+    rows.forEach(r=>{
+      const sc=SBU[r.it.bu];
+      body+='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(r.it.code+' — '+r.it.name)+'"><span class="muted small">'+esc(r.it.code)+'</span> '+esc(r.it.name)+'</td>';
+      r.cells.forEach(c=>{
+        if(showQ)body+='<td class="num">'+(c.q?fQ(c.q):'')+'</td>';
+        if(showV)body+='<td class="num">'+(c.v?fN(c.v):'')+'</td>';
+        if(showR)body+='<td class="num">'+(c.r!=null?f2(c.r):'')+'</td>';
+      });
+      body+='</tr>';
+    });
+    let foot='';
+    if(showQ||showV){
+      foot='<tr><td class="sbu-col"></td><td class="item-col">TOTAL &middot; '+rows.length+' items</td>';
+      months.forEach((m,i)=>{let mq=0,mv=0;rows.forEach(r=>{mq+=r.cells[i].q;mv+=r.cells[i].v;});
+        if(showQ)foot+='<td class="num">'+(mq?fQ(mq):'')+'</td>';
+        if(showV)foot+='<td class="num">'+(mv?fN(mv):'')+'</td>';
+        if(showR)foot+='<td class="num"></td>';});
+      foot+='</tr>';
+    }
+    wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
+  }catch(err){
+    wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render the monthly table: '+esc(err.message||err)+'</div>';
+  }
 }
 
 /* ============================ filters ============================ */
+function buildMulti(hostId, options, key, allLabel){
+  const host=document.getElementById(hostId); if(!host)return;
+  host.classList.add('ms');
+  const sel=state[key];
+  const vals=options.map(o=>o.value);
+  for(let i=sel.length-1;i>=0;i--){ if(!vals.includes(sel[i])) sel.splice(i,1); }
+  host.innerHTML='';
+  const btn=document.createElement('button'); btn.type='button'; btn.className='ms-btn';
+  const panel=document.createElement('div'); panel.className='ms-panel';
+  const upd=()=>{ btn.textContent = sel.length ? (allLabel+' · '+sel.length) : allLabel; };
+  const allLab=document.createElement('label');
+  const allCb=document.createElement('input'); allCb.type='checkbox'; allCb.checked=sel.length===0;
+  allLab.appendChild(allCb); allLab.appendChild(document.createTextNode(' All'));
+  panel.appendChild(allLab);
+  allCb.addEventListener('change',()=>{ if(allCb.checked){ sel.length=0; panel.querySelectorAll('input[type=checkbox]').forEach(c=>{if(c!==allCb)c.checked=false;}); } else { allCb.checked=true; } upd(); renderAll(); });
+  options.forEach(o=>{
+    const lab=document.createElement('label');
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.value=String(o.value); cb.checked=sel.map(String).includes(String(o.value));
+    cb.addEventListener('change',()=>{ const v=o.value; if(cb.checked){ if(!sel.includes(v)) sel.push(v); } else { const i=sel.indexOf(v); if(i>=0) sel.splice(i,1); } allCb.checked=sel.length===0; upd(); renderAll(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(' '+o.label));
+    panel.appendChild(lab);
+  });
+  host.appendChild(btn); host.appendChild(panel);
+  btn.addEventListener('click',e=>{ e.stopPropagation(); document.querySelectorAll('.ms.open').forEach(m=>{ if(m!==host)m.classList.remove('open'); }); host.classList.toggle('open'); });
+  upd();
+}
 function buildFilterOptions(){
   const fySel=document.getElementById('fFy');
   fySel.innerHTML=FYS.map(f=>'<option value="'+f+'">FY '+fyLabel(f)+(f===FYS[0]?' (current)':'')+'</option>').join('');
   if(state.fy!=null) fySel.value=state.fy;
-  const sbuSel=document.getElementById('fSbu');
-  sbuSel.innerHTML='<option value="">All SBU</option>'+DATA.sbus.map(s=>'<option value="'+s.bu+'">'+s.code+' — '+esc(s.name)+'</option>').join('');
-  sbuSel.value=state.sbu;
+  buildMulti('msSbu', DATA.sbus.map(s=>({value:s.bu,label:s.code+' — '+s.name})), 'sbu', 'All SBU');
+  buildMulti('msKind', [{value:'RM',label:'RM'},{value:'PM',label:'PM'}], 'kind', 'All RM/PM');
   const cats=[...new Set(DATA.items.map(i=>i.cat))].sort();
-  const catSel=document.getElementById('fCat');
-  catSel.innerHTML='<option value="">All categories</option>'+cats.map(c=>'<option>'+esc(c)+'</option>').join('');
-  catSel.value=state.cat;
-  document.getElementById('fKind').value=state.kind;
-  document.getElementById('fSrc').value=state.src;
+  buildMulti('msCat', cats.map(c=>({value:c,label:c})), 'cat', 'All categories');
+  buildMulti('msSrc', [{value:'Local',label:'Local'},{value:'Import',label:'Import'},{value:'n/a',label:'n/a'}], 'src', 'All sources');
   document.getElementById('fText').value=state.text;
 }
 function refreshMonths(){
@@ -567,18 +621,16 @@ function refreshMonths(){
 function initFilters(){
   document.getElementById('fFy').onchange=e=>{state.fy=parseInt(e.target.value,10);state.month=null;refreshMonths();renderAll();};
   document.querySelectorAll('#fMode button').forEach(b=>b.onclick=()=>{state.mode=b.dataset.m;document.querySelectorAll('#fMode button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
-  document.getElementById('fSbu').onchange=e=>{state.sbu=e.target.value;renderAll();};
-  document.getElementById('fKind').onchange=e=>{state.kind=e.target.value;renderAll();};
-  document.getElementById('fSrc').onchange=e=>{state.src=e.target.value;renderAll();};
   document.getElementById('fText').oninput=e=>{state.text=e.target.value;renderAll();};
-  document.getElementById('fCat').onchange=e=>{state.cat=e.target.value;renderAll();};
   document.getElementById('fMonth').onchange=e=>{state.month=e.target.value;renderAll();};
-  document.getElementById('btnReset').onclick=()=>{state.sbu='';state.kind='';state.cat='';state.src='';state.text='';state.sbuSel='ALL';
-    buildFilterOptions();renderAll();};
+  document.getElementById('btnReset').onclick=()=>{state.sbu=[];state.kind=[];state.cat=[];state.src=[];state.text='';state.sbuSel='ALL';
+    document.getElementById('fText').value='';buildFilterOptions();renderAll();};
   document.getElementById('btnCsv').onclick=exportCsv;
   document.getElementById('btnRefresh').onclick=()=>fetchData(false);
   const mf=document.getElementById('mFrom'); if(mf) mf.onchange=e=>{MRAT.from=e.target.value;renderMonthly();};
   const mt=document.getElementById('mTo'); if(mt) mt.onchange=e=>{MRAT.to=e.target.value;renderMonthly();};
+  const mm=document.getElementById('mMetric'); if(mm) mm.onchange=e=>{MRAT.metric=e.target.value;renderMonthly();};
+  document.addEventListener('click',e=>{ if(!e.target.closest || !e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 }
 function exportCsv(){
   const rows=computeItems().filter(r=>r.cq>0);
@@ -595,7 +647,8 @@ function exportCsv(){
 /* ============================ boot / refresh ============================ */
 function renderAll(){
   const rows=computeItems();
-  renderExec(rows); renderSbu(rows); renderItems(rows); renderDQ(rows); renderMonthly();
+  renderExec(rows); renderSbu(rows); renderItems(rows); renderDQ(rows);
+  const msec=document.getElementById('tab-monthly'); if(msec && !msec.classList.contains('hidden')) renderMonthly();
   document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
   const warn=document.getElementById('warnBox'); const msgs=[];
   const alelEmpty=DATA.sbus.some(s=>s.code==='ALEL' && !DATA.items.some(i=>i.bu===s.bu));
@@ -618,7 +671,7 @@ document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
   ['exec','sbu','item','dq','monthly'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
   renderAll();
 });
-window.addEventListener('resize',()=>renderAll());
+let _rz=null; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>renderAll(),200);});
 window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,renderMonthly:renderMonthly,monthsBetween:monthsBetween};
 
 /* boot: show the embedded snapshot immediately, then try to load live data.json */
