@@ -200,8 +200,16 @@
         </div>
       </div>
       <div id="mratSummary" class="mrat-sum"></div>
+      <div class="flexhead" style="margin-top:4px">
+        <h3 style="margin:0">COGS movement over time <span class="sub">(monthly total COGS, BDT crore)</span></h3>
+        <button id="btnMrChart">Download chart (PNG)</button>
+      </div>
+      <canvas id="cvMr" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div class="flexhead"><h3 style="margin:0">Monthly pivot <span class="sub">SBU &rarr; Item &rarr; month</span></h3><button id="btnMrCsv">Export table (CSV)</button></div>
       <div id="mratTable" class="mrat-wrap"></div>
-      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. Respects the SBU / RM-PM / category / source / search filters above (and the SBU filter here).</div>
+      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. The trend chart shows total COGS (Value). Respects the SBU / RM-PM / category / source / search filters above (and the SBU filter here).</div>
     </div>
   </section>
 </main>
@@ -332,7 +340,8 @@ function mount(cv){const dpr=window.devicePixelRatio||1;const w=cv.clientWidth||
   if(!cv.dataset.h){cv.dataset.h=String(cv.height||220);}
   const h=parseInt(cv.dataset.h,10)||220;
   cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';
-  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);return {x,w,h};}
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  x.fillStyle='#161d2e';x.fillRect(0,0,w,h);return {x,w,h};}
 function lineChart(cv,labels,series){
   const {x,w,h}=mount(cv); const padL=54,padR=12,padT=12,padB=30; const iw=w-padL-padR, ih=h-padT-padB;
   let max=0,min=0; series.forEach(s=>s.values.forEach(v=>{if(v==null)return;if(v>max)max=v;if(v<min)min=v;}));
@@ -539,6 +548,10 @@ function renderMonthly(){
       rows.push({it:it,cells:cells,rq:rq,rv:rv});
     });
     rows.sort((a,b)=> b.rv-a.rv);
+    const colTotals=months.map((m,i)=>{let q=0,v=0;rows.forEach(r=>{q+=r.cells[i].q;v+=r.cells[i].v;});return {q:q,v:v};});
+    MRAT.last={months:months,rows:rows,showQ:showQ,showV:showV,showR:showR,colTotals:colTotals};
+    const cvMr=document.getElementById('cvMr');
+    if(cvMr) lineChart(cvMr, months.map(monLabel), [{color:'#4f8cff', values: colTotals.map(c=>c.v)}]);
     const overall=tq?tv/tq:null;
     if(sum){
       sum.innerHTML='<div class="m"><div class="l">Total Quantity</div><div class="v">'+fQ(tq)+'</div><div class="s">'+months.length+' months</div></div>'+
@@ -574,6 +587,34 @@ function renderMonthly(){
   }catch(err){
     wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render the monthly table: '+esc(err.message||err)+'</div>';
   }
+}
+
+/* ============================ monthly exports ============================ */
+function exportMonthlyChart(){
+  const cv=document.getElementById('cvMr'); if(!cv||typeof cv.toDataURL!=='function')return;
+  const a=document.createElement('a');
+  a.href=cv.toDataURL('image/png');
+  a.download='COGS_Monthly_Movement_'+(MRAT.from||'')+'_to_'+(MRAT.to||'')+'.png';
+  document.body.appendChild(a);a.click();a.remove();
+}
+function exportMonthlyTable(){
+  const L=MRAT.last; if(!L){alert('Open the Monthly Rate Analysis tab first.');return;}
+  const head=['SBU','ItemCode','ItemName','UOM'];
+  L.months.forEach(m=>{const lab=monLabel(m); if(L.showQ)head.push(lab+' Qty'); if(L.showV)head.push(lab+' Value'); if(L.showR)head.push(lab+' Rate');});
+  const lines=[head.join(',')];
+  L.rows.forEach(rw=>{
+    const sc=SBU[rw.it.bu];
+    const arr=[sc?sc.code:'', rw.it.code, '"'+String(rw.it.name).replace(/"/g,'""')+'"', rw.it.uom||''];
+    rw.cells.forEach(c=>{ if(L.showQ)arr.push(c.q||''); if(L.showV)arr.push(c.v||''); if(L.showR)arr.push(c.r!=null?c.r:''); });
+    lines.push(arr.join(','));
+  });
+  const tot=['TOTAL','','',''];
+  L.months.forEach((m,i)=>{const c=L.colTotals[i]; if(L.showQ)tot.push(c.q||''); if(L.showV)tot.push(c.v||''); if(L.showR)tot.push('');});
+  lines.push(tot.join(','));
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='COGS_Monthly_Pivot_'+(MRAT.from||'')+'_to_'+(MRAT.to||'')+'.csv';
+  document.body.appendChild(a);a.click();a.remove();
 }
 
 /* ============================ filters ============================ */
@@ -643,6 +684,8 @@ function initFilters(){
   const mf=document.getElementById('mFrom'); if(mf) mf.onchange=e=>{MRAT.from=e.target.value;renderMonthly();};
   const mt=document.getElementById('mTo'); if(mt) mt.onchange=e=>{MRAT.to=e.target.value;renderMonthly();};
   const mm=document.getElementById('mMetric'); if(mm) mm.onchange=e=>{MRAT.metric=e.target.value;renderMonthly();};
+  const cbtn=document.getElementById('btnMrChart'); if(cbtn) cbtn.onclick=exportMonthlyChart;
+  const tbtn=document.getElementById('btnMrCsv'); if(tbtn) tbtn.onclick=exportMonthlyTable;
   document.addEventListener('click',e=>{ if(!e.target.closest || !e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 }
 function exportCsv(){
