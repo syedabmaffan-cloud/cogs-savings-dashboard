@@ -97,11 +97,13 @@
   .ms-panel label{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:5px;cursor:pointer;white-space:nowrap;font-size:12.5px;color:var(--txt)}
   .ms-panel label:hover{background:#22304d}
   .ms-panel input{accent-color:var(--acc)}
-  .mrat th.sbu-col,.mrat td.sbu-col{position:sticky;left:0;width:62px;min-width:62px;max-width:62px;background:var(--panel);z-index:5;text-align:left;color:var(--acc);font-weight:700}
-  .mrat th.sbu-col{top:0;z-index:7}
-  .mrat th.item-col,.mrat td.item-col{position:sticky;left:62px;width:280px;min-width:280px;max-width:280px;background:var(--panel);z-index:4;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .mrat th.item-col{top:0;z-index:6}
-  .mrat tfoot td.sbu-col,.mrat tfoot td.item-col{background:var(--panel2)}
+  .mrat th.sbu-col,.mrat td.sbu-col{position:sticky;left:0;width:56px;min-width:56px;max-width:56px;background:var(--panel);z-index:7;text-align:left;color:var(--acc);font-weight:700}
+  .mrat th.sbu-col{top:0}
+  .mrat th.item-col,.mrat td.item-col{position:sticky;left:56px;width:250px;min-width:250px;max-width:250px;background:var(--panel);z-index:6;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mrat th.item-col{top:0}
+  .mrat th.uom-col,.mrat td.uom-col{position:sticky;left:306px;width:56px;min-width:56px;max-width:56px;background:var(--panel);z-index:5;text-align:left;color:var(--mut);font-size:10.5px}
+  .mrat th.uom-col{top:0}
+  .mrat tfoot td.sbu-col,.mrat tfoot td.item-col,.mrat tfoot td.uom-col{background:var(--panel2)}
 </style>
 </head>
 <body>
@@ -191,6 +193,7 @@
       <div class="flexhead">
         <h3 style="margin:0">Monthly Rate Analysis <span class="sub">month-wise Qty, Value &amp; Rate (selected SBU &amp; date range)</span></h3>
         <div class="fld-row">
+          <div class="fld"><label>SBU</label><div class="ms" id="msSbuM"></div></div>
           <div class="fld"><label>From month</label><select id="mFrom"></select></div>
           <div class="fld"><label>To month</label><select id="mTo"></select></div>
           <div class="fld"><label>Metric</label><select id="mMetric"><option value="all">All (Qty · Value · Rate)</option><option value="qty">Quantity</option><option value="value">Value</option><option value="rate" selected>Rate</option></select></div>
@@ -198,7 +201,7 @@
       </div>
       <div id="mratSummary" class="mrat-sum"></div>
       <div id="mratTable" class="mrat-wrap"></div>
-      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Overall Rate = Total Value &divide; Total Quantity (not an average of monthly rates). Blank cell = no activity. Respects the SBU / RM-PM / category / source / search filters above.</div>
+      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. Respects the SBU / RM-PM / category / source / search filters above (and the SBU filter here).</div>
     </div>
   </section>
 </main>
@@ -420,13 +423,13 @@ function renderSbu(rows){
   lineChart(document.getElementById('cvTrendSbu'),months.map(monLabel),[{color:'#4f8cff',values:cur},{color:'#25b06b',values:lyS},{color:'#e0a126',values:budS}]);
   const list=[...scoped].filter(r=>r.cq>0).sort((a,b)=>(b.lySav||-1e18)-(a.lySav||-1e18));
   const wrap=document.getElementById('sbuItems');
-  wrap.innerHTML='<div class="tblwrap"><table><thead><tr><th>Code</th><th>Item</th><th>Type</th><th class="num">Qty</th><th class="num">Cur rate</th><th class="num">LY rate</th><th class="num">LY saving</th><th class="num">Bud rate</th><th class="num">Bud saving</th></tr></thead><tbody>'+
-    list.map((r,i)=>'<tr class="clickable" data-i="'+i+'"><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,48)+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
+  wrap.innerHTML='<div class="tblwrap"><table><thead><tr><th>Code</th><th>Item</th><th>UOM</th><th>Type</th><th class="num">Qty</th><th class="num">Cur rate</th><th class="num">LY rate</th><th class="num">LY saving</th><th class="num">Bud rate</th><th class="num">Bud saving</th></tr></thead><tbody>'+
+    list.map((r,i)=>'<tr class="clickable" data-i="'+i+'"><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,48)+'</td><td class="muted small">'+esc(r.uom||'')+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
       '<td class="num">'+fN(r.cq)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+(r.lyRate!=null?f2(r.lyRate):'<span class="pill no">N/A</span>')+'</td>'+
       '<td class="num '+cls(r.lySav)+'">'+(r.lySav!=null?sign(r.lySav)+fCr(r.lySav):'—')+'</td>'+
       '<td class="num">'+(r.budRate!=null?f2(r.budRate):'<span class="pill no">No Budget</span>')+'</td>'+
       '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>'+
-      '<tr class="hidden" id="drill'+i+'"><td colspan="9">'+drillHTML(r)+'</td></tr>').join('')+'</tbody></table></div>';
+      '<tr class="hidden" id="drill'+i+'"><td colspan="10">'+drillHTML(r)+'</td></tr>').join('')+'</tbody></table></div>';
   wrap.querySelectorAll('tr.clickable').forEach(tr=>tr.onclick=()=>{document.getElementById('drill'+tr.dataset.i).classList.toggle('hidden');});
 }
 function drillHTML(r){
@@ -446,9 +449,9 @@ function renderItems(rows){
   const list=[...rows].filter(r=>r.cq>0).sort((a,b)=>(b.cv||0)-(a.cv||0));
   document.getElementById('itemCount').textContent='('+list.length+' items)';
   document.getElementById('itemTable').innerHTML='<div class="tblwrap" style="max-height:640px"><table><thead><tr>'+
-    '<th>SBU</th><th>Code</th><th>Item</th><th>Type</th><th>Category</th><th class="num">Qty</th><th class="num">Current rate</th><th class="num">Current value</th>'+
+    '<th>SBU</th><th>Code</th><th>Item</th><th>UOM</th><th>Type</th><th>Category</th><th class="num">Qty</th><th class="num">Current rate</th><th class="num">Current value</th>'+
     '<th class="num">LY rate</th><th class="num">LY savings</th><th class="num">Budget rate</th><th class="num">Budget savings</th></tr></thead><tbody>'+
-    list.map(r=>'<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name)+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
+    list.map(r=>'<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name)+'</td><td class="muted small">'+esc(r.uom||'')+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
       '<td class="muted small">'+esc(r.cat)+'</td><td class="num">'+fN(r.cq)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+fN(r.cv)+'</td>'+
       '<td class="num">'+(r.lyRate!=null?f2(r.lyRate):'<span class="pill no">N/A</span>')+'</td>'+
       '<td class="num '+cls(r.lySav)+'">'+(r.lySav!=null?sign(r.lySav)+fCr(r.lySav):'—')+'</td>'+
@@ -540,10 +543,9 @@ function renderMonthly(){
     if(sum){
       sum.innerHTML='<div class="m"><div class="l">Total Quantity</div><div class="v">'+fQ(tq)+'</div><div class="s">'+months.length+' months</div></div>'+
         '<div class="m"><div class="l">Total Value</div><div class="v">'+fN(tv)+'</div><div class="s">BDT &middot; '+fCr(tv)+'</div></div>'+
-        '<div class="m"><div class="l">Overall Rate</div><div class="v">'+(overall!=null?f2(overall):'—')+'</div><div class="s">Total Value &divide; Total Qty</div></div>'+
         '<div class="m"><div class="l">Items</div><div class="v">'+rows.length+'</div><div class="s">with activity in range</div></div>';
     }
-    let h1='<tr><th class="sbu-col" rowspan="2">SBU</th><th class="item-col" rowspan="2">Item</th>';
+    let h1='<tr><th class="sbu-col" rowspan="2">SBU</th><th class="item-col" rowspan="2">Item</th><th class="uom-col" rowspan="2">UOM</th>';
     let h2='<tr>';
     months.forEach(m=>{h1+='<th colspan="'+ncol+'">'+monLabel(m)+'</th>';
       if(showQ)h2+='<th class="num">Qty</th>'; if(showV)h2+='<th class="num">Value</th>'; if(showR)h2+='<th class="num">Rate</th>';});
@@ -551,7 +553,7 @@ function renderMonthly(){
     let body='';
     rows.forEach(r=>{
       const sc=SBU[r.it.bu];
-      body+='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(r.it.code+' — '+r.it.name)+'"><span class="muted small">'+esc(r.it.code)+'</span> '+esc(r.it.name)+'</td>';
+      body+='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(r.it.code+' — '+r.it.name)+'"><span class="muted small">'+esc(r.it.code)+'</span> '+esc(r.it.name)+'</td><td class="uom-col">'+esc(r.it.uom||'')+'</td>';
       r.cells.forEach(c=>{
         if(showQ)body+='<td class="num">'+(c.q?fQ(c.q):'')+'</td>';
         if(showV)body+='<td class="num">'+(c.v?fN(c.v):'')+'</td>';
@@ -561,7 +563,7 @@ function renderMonthly(){
     });
     let foot='';
     if(showQ||showV){
-      foot='<tr><td class="sbu-col"></td><td class="item-col">TOTAL &middot; '+rows.length+' items</td>';
+      foot='<tr><td class="sbu-col"></td><td class="item-col">TOTAL &middot; '+rows.length+' items</td><td class="uom-col"></td>';
       months.forEach((m,i)=>{let mq=0,mv=0;rows.forEach(r=>{mq+=r.cells[i].q;mv+=r.cells[i].v;});
         if(showQ)foot+='<td class="num">'+(mq?fQ(mq):'')+'</td>';
         if(showV)foot+='<td class="num">'+(mv?fN(mv):'')+'</td>';
@@ -575,42 +577,53 @@ function renderMonthly(){
 }
 
 /* ============================ filters ============================ */
+function syncMulti(){
+  document.querySelectorAll('.ms[data-key]').forEach(h=>{
+    const key=h.dataset.key; const sel=state[key]||[]; const lbl=h.dataset.label||'All';
+    const btn=h.querySelector('.ms-btn'); if(btn) btn.textContent = sel.length ? (lbl+' · '+sel.length) : lbl;
+    h.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      if(cb.value==='__all__') cb.checked = sel.length===0;
+      else cb.checked = sel.map(String).includes(cb.value);
+    });
+  });
+}
 function buildMulti(hostId, options, key, allLabel){
   const host=document.getElementById(hostId); if(!host)return;
   host.classList.add('ms');
+  host.dataset.key=key; host.dataset.label=allLabel;
   const sel=state[key];
   const vals=options.map(o=>o.value);
   for(let i=sel.length-1;i>=0;i--){ if(!vals.includes(sel[i])) sel.splice(i,1); }
   host.innerHTML='';
   const btn=document.createElement('button'); btn.type='button'; btn.className='ms-btn';
   const panel=document.createElement('div'); panel.className='ms-panel';
-  const upd=()=>{ btn.textContent = sel.length ? (allLabel+' · '+sel.length) : allLabel; };
   const allLab=document.createElement('label');
-  const allCb=document.createElement('input'); allCb.type='checkbox'; allCb.checked=sel.length===0;
+  const allCb=document.createElement('input'); allCb.type='checkbox'; allCb.value='__all__'; allCb.checked=sel.length===0;
   allLab.appendChild(allCb); allLab.appendChild(document.createTextNode(' All'));
   panel.appendChild(allLab);
-  allCb.addEventListener('change',()=>{ if(allCb.checked){ sel.length=0; panel.querySelectorAll('input[type=checkbox]').forEach(c=>{if(c!==allCb)c.checked=false;}); } else { allCb.checked=true; } upd(); renderAll(); });
+  allCb.addEventListener('change',()=>{ if(allCb.checked){ sel.length=0; } else { allCb.checked=true; } syncMulti(); renderAll(); });
   options.forEach(o=>{
     const lab=document.createElement('label');
     const cb=document.createElement('input'); cb.type='checkbox'; cb.value=String(o.value); cb.checked=sel.map(String).includes(String(o.value));
-    cb.addEventListener('change',()=>{ const v=o.value; if(cb.checked){ if(!sel.includes(v)) sel.push(v); } else { const i=sel.indexOf(v); if(i>=0) sel.splice(i,1); } allCb.checked=sel.length===0; upd(); renderAll(); });
+    cb.addEventListener('change',()=>{ const v=o.value; if(cb.checked){ if(!sel.includes(v)) sel.push(v); } else { const i=sel.indexOf(v); if(i>=0) sel.splice(i,1); } syncMulti(); renderAll(); });
     lab.appendChild(cb); lab.appendChild(document.createTextNode(' '+o.label));
     panel.appendChild(lab);
   });
   host.appendChild(btn); host.appendChild(panel);
   btn.addEventListener('click',e=>{ e.stopPropagation(); document.querySelectorAll('.ms.open').forEach(m=>{ if(m!==host)m.classList.remove('open'); }); host.classList.toggle('open'); });
-  upd();
 }
 function buildFilterOptions(){
   const fySel=document.getElementById('fFy');
   fySel.innerHTML=FYS.map(f=>'<option value="'+f+'">FY '+fyLabel(f)+(f===FYS[0]?' (current)':'')+'</option>').join('');
   if(state.fy!=null) fySel.value=state.fy;
   buildMulti('msSbu', DATA.sbus.map(s=>({value:s.bu,label:s.code+' — '+s.name})), 'sbu', 'All SBU');
+  buildMulti('msSbuM', DATA.sbus.map(s=>({value:s.bu,label:s.code+' — '+s.name})), 'sbu', 'All SBU');
   buildMulti('msKind', [{value:'RM',label:'RM'},{value:'PM',label:'PM'}], 'kind', 'All RM/PM');
   const cats=[...new Set(DATA.items.map(i=>i.cat))].sort();
   buildMulti('msCat', cats.map(c=>({value:c,label:c})), 'cat', 'All categories');
   buildMulti('msSrc', [{value:'Local',label:'Local'},{value:'Import',label:'Import'},{value:'n/a',label:'n/a'}], 'src', 'All sources');
   document.getElementById('fText').value=state.text;
+  syncMulti();
 }
 function refreshMonths(){
   const av=monthsWithData(state.fy); const sel=document.getElementById('fMonth');
@@ -634,9 +647,9 @@ function initFilters(){
 }
 function exportCsv(){
   const rows=computeItems().filter(r=>r.cq>0);
-  const head=['SBU','ItemCode','ItemName','Type','Category','CurrentQty','CurrentRate','CurrentValue','LYRate','LYSavings','BudgetRate','BudgetSavings'];
+  const head=['SBU','ItemCode','ItemName','Type','UOM','Category','CurrentQty','CurrentRate','CurrentValue','LYRate','LYSavings','BudgetRate','BudgetSavings'];
   const lines=[head.join(',')];
-  rows.forEach(r=>{lines.push([r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"',r.kind,'"'+r.cat+'"',r.cq,r.cRate,r.cv,
+  rows.forEach(r=>{lines.push([r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"',r.kind,r.uom||'','"'+r.cat+'"',r.cq,r.cRate,r.cv,
     r.lyRate==null?'':r.lyRate,r.lySav==null?'':r.lySav,r.budRate==null?'':r.budRate,r.budSav==null?'':r.budSav].join(','));});
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
