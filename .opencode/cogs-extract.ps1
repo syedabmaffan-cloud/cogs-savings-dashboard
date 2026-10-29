@@ -278,6 +278,40 @@ if (-not $NoBudget) {
   Write-Host ("[cogs] budget rows: {0}" -f $budget.Count)
 }
 
+# ================================================================ 2b. BUDGETED COGS + ACTUAL SALES
+Write-Host '[cogs] reading budgeted COGS (GL 4810001) and actual sales from MCP ...'
+$budgetCogs = New-Object System.Collections.Generic.List[object]
+$salesList  = New-Object System.Collections.Generic.List[object]
+
+$budRows = Invoke-McpQuery @"
+SELECT intBusinessUnitId AS BU, intYearId AS Yr, intMonthId AS Mn, SUM(numAmount) AS Amt
+FROM bgt.tblBudgetIncomeExpenseRow WITH (NOLOCK)
+WHERE intBusinessUnitId IN ($BuList) AND intGeneralLedgerId = 103 AND isActive = 1 AND intYearId IN (2025,2026,2027)
+GROUP BY intBusinessUnitId, intYearId, intMonthId
+ORDER BY intBusinessUnitId, intYearId, intMonthId
+"@
+foreach ($r in $budRows) {
+  if ($r.Count -lt 4) { continue }
+  $v = ToNum $r[3]; if ($null -eq $v) { continue }
+  $mm = "{0}-{1:00}" -f [int]$r[1], [int]$r[2]
+  $budgetCogs.Add([pscustomobject]@{ bu = [int]$r[0]; m = $mm; v = [math]::Abs([double]$v) })
+}
+
+$salesRows = Invoke-McpQuery @"
+SELECT intBusinessUnitId AS BU, YEAR(dteSalesOrderDate) AS Yr, MONTH(dteSalesOrderDate) AS Mn, SUM(numNetOrderValue) AS Amt
+FROM oms.tblSalesOrderHeader WITH (NOLOCK)
+WHERE intBusinessUnitId IN ($BuList) AND isActive = 1 AND isRejected = 0 AND dteSalesOrderDate >= '2025-07-01' AND dteSalesOrderDate < '2027-07-01'
+GROUP BY intBusinessUnitId, YEAR(dteSalesOrderDate), MONTH(dteSalesOrderDate)
+ORDER BY intBusinessUnitId, YEAR(dteSalesOrderDate), MONTH(dteSalesOrderDate)
+"@
+foreach ($r in $salesRows) {
+  if ($r.Count -lt 4) { continue }
+  $v = ToNum $r[3]; if ($null -eq $v) { continue }
+  $mm = "{0}-{1:00}" -f [int]$r[1], [int]$r[2]
+  $salesList.Add([pscustomobject]@{ bu = [int]$r[0]; m = $mm; v = [double]$v })
+}
+Write-Host ("[cogs] budgetCogs rows: {0} | sales rows: {1}" -f $budgetCogs.Count, $salesList.Count)
+
 # ================================================================ 3. WRITE
 $data = [pscustomobject]@{
   generatedAt = (Get-Date).ToString('s')
@@ -286,6 +320,8 @@ $data = [pscustomobject]@{
   sbus        = $Sbus
   items       = $items
   budget      = $budget
+  budgetCogs  = $budgetCogs
+  sales       = $salesList
 }
 $json = $data | ConvertTo-Json -Depth 12 -Compress
 [IO.File]::WriteAllText($OutJson, $json, (New-Object Text.UTF8Encoding($false)))

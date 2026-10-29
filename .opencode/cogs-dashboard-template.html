@@ -201,15 +201,16 @@
       </div>
       <div id="mratSummary" class="mrat-sum"></div>
       <div class="flexhead" style="margin-top:4px">
-        <h3 style="margin:0">COGS movement over time <span class="sub">(monthly total COGS, BDT crore)</span></h3>
+        <h3 style="margin:0">COGS vs Budgeted COGS vs Actual Sales <span class="sub">(SBU level, BDT crore)</span></h3>
         <button id="btnMrChart">Download chart (PNG)</button>
       </div>
-      <canvas id="cvMr" height="180"></canvas>
+      <canvas id="cvMr" height="200"></canvas>
+      <div class="legend"><span><i style="background:#4f8cff"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#e0a126"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#25b06b"></i>Actual Sales (net order value)</span></div>
     </div>
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Monthly pivot <span class="sub">SBU &rarr; Item &rarr; month</span></h3><button id="btnMrCsv">Export table (CSV)</button></div>
       <div id="mratTable" class="mrat-wrap"></div>
-      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. The trend chart shows total COGS (Value). Respects the SBU / RM-PM / category / source / search filters above (and the SBU filter here).</div>
+      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. <b>Trend chart (SBU level):</b> Actual COGS = direct RM/PM issue value; Budgeted COGS = approved GL 4810001 budget; Actual Sales = net sales-order value. Definitions differ (actual COGS is materials-only), so use the chart for trend/scale, not as a gross-margin calculation. Budget and sales are SBU-level and not affected by item-level filters.</div>
     </div>
   </section>
 </main>
@@ -550,8 +551,19 @@ function renderMonthly(){
     rows.sort((a,b)=> b.rv-a.rv);
     const colTotals=months.map((m,i)=>{let q=0,v=0;rows.forEach(r=>{q+=r.cells[i].q;v+=r.cells[i].v;});return {q:q,v:v};});
     MRAT.last={months:months,rows:rows,showQ:showQ,showV:showV,showR:showR,colTotals:colTotals};
+    const inScope=(bu)=> state.sbu.length===0 || state.sbu.includes(bu);
+    const actualCogs=months.map(m=>{let s=0;DATA.items.forEach(it=>{if(!inScope(it.bu))return;const d=it.months[m];if(d)s+=d.v;});return s;});
+    const budByM={},salByM={};
+    (DATA.budgetCogs||[]).forEach(b=>{if(!inScope(b.bu))return;budByM[b.m]=(budByM[b.m]||0)+b.v;});
+    (DATA.sales||[]).forEach(b=>{if(!inScope(b.bu))return;salByM[b.m]=(salByM[b.m]||0)+b.v;});
+    const budSeries=months.map(m=>budByM[m]!=null?budByM[m]:null);
+    const salSeries=months.map(m=>salByM[m]!=null?salByM[m]:null);
     const cvMr=document.getElementById('cvMr');
-    if(cvMr) lineChart(cvMr, months.map(monLabel), [{color:'#4f8cff', values: colTotals.map(c=>c.v)}]);
+    if(cvMr) lineChart(cvMr, months.map(monLabel), [
+      {color:'#4f8cff', values: actualCogs},
+      {color:'#e0a126', values: budSeries},
+      {color:'#25b06b', values: salSeries}
+    ]);
     const overall=tq?tv/tq:null;
     if(sum){
       sum.innerHTML='<div class="m"><div class="l">Total Quantity</div><div class="v">'+fQ(tq)+'</div><div class="s">'+months.length+' months</div></div>'+
