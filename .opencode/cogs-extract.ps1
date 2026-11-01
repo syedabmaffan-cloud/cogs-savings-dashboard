@@ -208,7 +208,7 @@ while ($true) {
     $bu = [int]$c[0]; $iid = [int]$c[1]; $key = "$bu|$iid"
     if (-not $byKey.ContainsKey($key)) {
       $it = [pscustomobject]@{ bu = $bu; itemId = $iid; code = "$($c[2])"; name = ''
-                               kind = "$($c[3])"; cat = "$($c[4])"; uom = "$($c[5])"; months = @{} }
+                               kind = "$($c[3])"; cat = "$($c[4])"; uom = "$($c[5])"; months = @{}; stockRate = 0.0 }
       $byKey[$key] = $it; $items.Add($it)
     }
     $mm = "$($c[6])"
@@ -227,13 +227,20 @@ while ($true) {
 # ORDER BY/OFFSET) combination, so names are fetched by item id in chunks instead.
 $ids = @($items | ForEach-Object { $_.itemId } | Sort-Object -Unique)
 $nameMap = @{}
+$rateMap = @{}
 for ($i = 0; $i -lt $ids.Count; $i += 300) {
   $last  = [Math]::Min($i + 299, $ids.Count - 1)
   $chunk = ($ids[$i..$last]) -join ','
-  $nrows = Invoke-McpQuery "SELECT intItemId, strItemName FROM itm.tblItem WITH (NOLOCK) WHERE intItemId IN ($chunk)"
-  foreach ($n in $nrows) { if ($n.Count -ge 2) { $nameMap[[int]$n[0]] = "$($n[1])" } }
+  $nrows = Invoke-McpQuery "SELECT intItemId, strItemName, numAverageRate FROM itm.tblItem WITH (NOLOCK) WHERE intItemId IN ($chunk)"
+  foreach ($n in $nrows) {
+    if ($n.Count -ge 2) { $nameMap[[int]$n[0]] = "$($n[1])" }
+    if ($n.Count -ge 3) { $rv = ToNum $n[2]; if ($null -ne $rv) { $rateMap[[int]$n[0]] = [double]$rv } }
+  }
 }
-foreach ($it in $items) { if ($nameMap.ContainsKey($it.itemId)) { $it.name = $nameMap[$it.itemId] } }
+foreach ($it in $items) {
+  if ($nameMap.ContainsKey($it.itemId)) { $it.name = $nameMap[$it.itemId] }
+  if ($rateMap.ContainsKey($it.itemId)) { $it.stockRate = [double]$rateMap[$it.itemId] }
+}
 Write-Host ("[cogs] actuals: {0} items, latest month {1}" -f $items.Count, $maxMonth)
 
 # ================================================================ 2. BUDGET

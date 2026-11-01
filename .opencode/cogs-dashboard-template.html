@@ -120,7 +120,8 @@
     <div class="tab" data-tab="sbu">SBU Analysis</div>
     <div class="tab" data-tab="item">Item Analysis</div>
     <div class="tab" data-tab="dq">Data Quality</div>
-    <div class="tab" data-tab="monthly">Monthly Rate Analysis</div>
+    <div class="tab" data-tab="monthly">Material Rate Analysis</div>
+    <div class="tab" data-tab="pareto">Material COGS Pareto</div>
   </div>
 </header>
 
@@ -191,26 +192,45 @@
   <section id="tab-monthly" class="hidden">
     <div class="card">
       <div class="flexhead">
-        <h3 style="margin:0">Monthly Rate Analysis <span class="sub">month-wise Qty, Value &amp; Rate (selected SBU &amp; date range)</span></h3>
+        <h3 style="margin:0">Material Rate Analysis <span class="sub">historical actual or LE COGS (rolling 12-month forecast)</span></h3>
         <div class="fld-row">
+          <div class="fld"><label>View</label><div class="seg" id="mrView"><button data-v="actual" class="active">Actual</button><button data-v="le">LE COGS (12-mo)</button></div></div>
           <div class="fld"><label>SBU</label><div class="ms" id="msSbuM"></div></div>
-          <div class="fld"><label>From month</label><select id="mFrom"></select></div>
-          <div class="fld"><label>To month</label><select id="mTo"></select></div>
+          <div class="fld" id="fldFrom"><label>From month</label><select id="mFrom"></select></div>
+          <div class="fld" id="fldTo"><label>To month</label><select id="mTo"></select></div>
+          <div class="fld hidden" id="fldLeFrom"><label>Forecast from</label><select id="mLeo"></select></div>
           <div class="fld"><label>Metric</label><select id="mMetric"><option value="all">All (Qty · Value · Rate)</option><option value="qty">Quantity</option><option value="value">Value</option><option value="rate" selected>Rate</option></select></div>
         </div>
       </div>
       <div id="mratSummary" class="mrat-sum"></div>
       <div class="flexhead" style="margin-top:4px">
-        <h3 style="margin:0">COGS vs Budgeted COGS vs Actual Sales <span class="sub">(SBU level, BDT crore)</span></h3>
+        <h3 style="margin:0" id="mrChartTitle">COGS vs Budgeted COGS vs Actual Sales <span class="sub">(SBU level, BDT crore)</span></h3>
         <button id="btnMrChart">Download chart (PNG)</button>
       </div>
       <canvas id="cvMr" height="200"></canvas>
-      <div class="legend"><span><i style="background:#4f8cff"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#e0a126"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#25b06b"></i>Actual Sales (net order value)</span></div>
+      <div class="legend" id="mrLegend"><span><i style="background:#4f8cff"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#e0a126"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#25b06b"></i>Actual Sales (net order value)</span></div>
     </div>
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Monthly pivot <span class="sub">SBU &rarr; Item &rarr; month</span></h3><button id="btnMrCsv">Export table (CSV)</button></div>
       <div id="mratTable" class="mrat-wrap"></div>
       <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. <b>Trend chart (SBU level):</b> Actual COGS = direct RM/PM issue value; Budgeted COGS = approved GL 4810001 budget; Actual Sales = net sales-order value. Definitions differ (actual COGS is materials-only), so use the chart for trend/scale, not as a gross-margin calculation. Budget and sales are SBU-level and not affected by item-level filters.</div>
+    </div>
+  </section>
+
+  <section id="tab-pareto" class="hidden">
+    <div class="card">
+      <div class="flexhead">
+        <h3 style="margin:0">Material COGS Pareto <span class="sub">materials ranked by COGS contribution (selected period &amp; filters)</span></h3>
+        <button id="btnParetoCsv">Export table (CSV)</button>
+      </div>
+      <div id="paretoSummary" class="mrat-sum"></div>
+      <canvas id="cvPareto" height="260"></canvas>
+      <div class="legend"><span><i style="background:#4f8cff"></i>Material COGS (top materials)</span><span><i style="background:#5a6b8c"></i>Beyond 80%</span><span><i style="background:#e0a126"></i>Cumulative %</span><span><i style="background:#e5484d"></i>80% threshold</span></div>
+      <div class="note small">Pareto ranks materials by COGS value for the selected period; the line is cumulative contribution. Materials within the first ~80% are highlighted. Uses the top filters (FY / MTD-YTD / month) and the SBU / RM-PM / category / search filters.</div>
+    </div>
+    <div class="card">
+      <div class="flexhead"><h3 style="margin:0">Pareto detail <span class="sub" id="paretoCount"></span></h3></div>
+      <div id="paretoTable" class="tblwrap" style="max-height:520px"></div>
     </div>
   </section>
 </main>
@@ -503,7 +523,8 @@ function renderDQ(rows){
 }
 
 /* ============================ monthly rate analysis ============================ */
-const MRAT={from:null,to:null,metric:'rate'};
+const MRAT={from:null,to:null,metric:'rate',view:'actual',leFrom:null};
+const PARETO={last:null};
 function allMonthsSorted(){const s=new Set();DATA.items.forEach(it=>Object.keys(it.months).forEach(m=>s.add(m)));return [...s].sort();}
 function monthsBetween(a,b){if(!a||!b)return [];const out=[];const e=b.split('-').map(Number);let y=+a.split('-')[0],m=+a.split('-')[1],g=0;while((y<e[0]||(y===e[0]&&m<=e[1]))&&g++<600){out.push(ym(y,m));if(++m>12){m=1;y++;}}return out;}
 function initMonthlyControls(){
@@ -517,6 +538,20 @@ function initMonthlyControls(){
   const opts=months.map(m=>'<option value="'+m+'">'+monLabel(m)+'</option>').join('');
   f.innerHTML=opts; t.innerHTML=opts; f.value=MRAT.from; t.value=MRAT.to;
   const mm=document.getElementById('mMetric'); if(mm) mm.value=MRAT.metric||'rate';
+  const ml=document.getElementById('mLeo');
+  if(ml){
+    if(!MRAT.leFrom || !months.includes(MRAT.leFrom)) MRAT.leFrom = (ASOF && months.includes(ASOF)) ? ASOF : months[months.length-1];
+    ml.innerHTML=opts; ml.value=MRAT.leFrom;
+  }
+  applyMonthlyView();
+}
+function applyMonthlyView(){
+  const le = MRAT.view==='le';
+  const a=document.getElementById('fldFrom'), b=document.getElementById('fldTo'), c=document.getElementById('fldLeFrom');
+  if(a) a.classList.toggle('hidden', le);
+  if(b) b.classList.toggle('hidden', le);
+  if(c) c.classList.toggle('hidden', !le);
+  document.querySelectorAll('#mrView button').forEach(x=>x.classList.toggle('active', x.dataset.v===MRAT.view));
 }
 function monthlyItems(){
   const list=[];
@@ -534,6 +569,9 @@ function monthlyItems(){
 function renderMonthly(){
   const wrap=document.getElementById('mratTable'); if(!wrap)return;
   const sum=document.getElementById('mratSummary');
+  if(MRAT.view==='le'){ renderMonthlyLE(wrap,sum); return; }
+  const ct=document.getElementById('mrChartTitle'); if(ct) ct.innerHTML='COGS vs Budgeted COGS vs Actual Sales <span class="sub">(SBU level, BDT crore)</span>';
+  const lg=document.getElementById('mrLegend'); if(lg) lg.innerHTML='<span><i style="background:#4f8cff"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#e0a126"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#25b06b"></i>Actual Sales (net order value)</span>';
   try{
     const months=monthsBetween(MRAT.from,MRAT.to);
     if(!months.length){wrap.innerHTML='<div class="muted small" style="padding:10px">Choose a valid From/To month range.</div>';if(sum)sum.innerHTML='';return;}
@@ -601,6 +639,138 @@ function renderMonthly(){
   }
 }
 
+/* ============================ LE COGS (rolling 12-month forecast) ============================ */
+function forecastMonths(start,n){const out=[];let y=+start.slice(0,4),m=+start.slice(5,7);for(let i=0;i<n;i++){out.push(ym(y,m));m++;if(m>12){m=1;y++;}}return out;}
+function basisMonths(start,k){const out=[];let y=+start.slice(0,4),m=+start.slice(5,7);for(let i=0;i<k;i++){m--;if(m<1){m=12;y--;}out.unshift(ym(y,m));}return out;}
+function latestRate(it){const ms=Object.keys(it.months).sort();for(let i=ms.length-1;i>=0;i--){const d=it.months[ms[i]];if(d&&d.q>0)return d.v/d.q;}return null;}
+function leCompute(){
+  const start=MRAT.leFrom||ASOF;
+  const fmonths=forecastMonths(start,12);
+  const bmonths=basisMonths(start,3);
+  const rows=[]; let monthly=0;
+  monthlyItems().forEach(it=>{
+    let q=0,n=0;
+    bmonths.forEach(m=>{const d=it.months[m];if(d){q+=d.q;n++;}});
+    const avg=n?q/n:0;
+    if(avg<=0) return;
+    let rate=(it.stockRate&&it.stockRate>0)?it.stockRate:latestRate(it);
+    if(!rate||rate<=0) return;
+    const v=avg*rate; monthly+=v;
+    rows.push({it:it,avgQty:avg,rate:rate,v:v});
+  });
+  rows.sort((a,b)=>b.v-a.v);
+  return {start:start,fmonths:fmonths,bmonths:bmonths,rows:rows,monthly:monthly};
+}
+function renderMonthlyLE(wrap,sum){
+  try{
+    const L=leCompute();
+    const total12=L.monthly*12;
+    const metric=MRAT.metric||'value';
+    const showQ=(metric==='all'||metric==='qty'), showV=(metric==='all'||metric==='value'), showR=(metric==='all'||metric==='rate');
+    const inItems=monthlyItems();
+    const histMonths=allMonthsSorted().filter(m=>m<L.start).slice(-12);
+    const histSeries=histMonths.map(m=>{let v=0;inItems.forEach(it=>{const d=it.months[m];if(d)v+=d.v;});return v;});
+    const leSeries=L.fmonths.map(()=>L.monthly);
+    const cats=histMonths.concat(L.fmonths);
+    const cv=document.getElementById('cvMr');
+    if(cv) lineChart(cv, cats.map(monLabel), [
+      {color:'#4f8cff', values: histSeries.concat(L.fmonths.map(()=>null))},
+      {color:'#e0a126', values: histMonths.map(()=>null).concat(leSeries)}
+    ]);
+    const ct=document.getElementById('mrChartTitle'); if(ct) ct.innerHTML='LE COGS — 12-month forecast from '+monLabel(L.start)+' <span class="sub">(SBU level, BDT crore; blue = historical actual)</span>';
+    const lg=document.getElementById('mrLegend'); if(lg) lg.innerHTML='<span><i style="background:#4f8cff"></i>Historical actual COGS</span><span><i style="background:#e0a126"></i>LE COGS (projected)</span>';
+    if(sum){
+      sum.innerHTML='<div class="m"><div class="l">LE COGS (next 12 months)</div><div class="v">'+fCr(total12)+'</div><div class="s">projected total</div></div>'+
+        '<div class="m"><div class="l">Avg monthly LE COGS</div><div class="v">'+fCr(L.monthly)+'</div><div class="s">per month</div></div>'+
+        '<div class="m"><div class="l">Materials</div><div class="v">'+L.rows.length+'</div><div class="s">with projected consumption</div></div>'+
+        '<div class="m"><div class="l">Basis</div><div class="v small">'+monLabel(L.bmonths[0])+'–'+monLabel(L.bmonths[L.bmonths.length-1])+' avg qty</div><div class="s">&times; latest stock rate</div></div>';
+    }
+    const ncol=(showQ?1:0)+(showV?1:0)+(showR?1:0)||1;
+    let h1='<tr><th class="sbu-col" rowspan="2">SBU</th><th class="item-col" rowspan="2">Item</th><th class="uom-col" rowspan="2">UOM</th>';
+    let h2='<tr>';
+    L.fmonths.forEach(m=>{h1+='<th colspan="'+ncol+'">'+monLabel(m)+'</th>'; if(showQ)h2+='<th class="num">Qty</th>'; if(showV)h2+='<th class="num">LE COGS</th>'; if(showR)h2+='<th class="num">Rate</th>';});
+    h1+='</tr>'; h2+='</tr>';
+    let body='';
+    L.rows.forEach(rw=>{
+      const sc=SBU[rw.it.bu];
+      body+='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(rw.it.code+' — '+rw.it.name)+'"><span class="muted small">'+esc(rw.it.code)+'</span> '+esc(rw.it.name)+'</td><td class="uom-col">'+esc(rw.it.uom||'')+'</td>';
+      L.fmonths.forEach(()=>{ if(showQ)body+='<td class="num">'+fQ(rw.avgQty)+'</td>'; if(showV)body+='<td class="num">'+fN(rw.v)+'</td>'; if(showR)body+='<td class="num">'+f2(rw.rate)+'</td>'; });
+      body+='</tr>';
+    });
+    let foot='';
+    if(showQ||showV){
+      const tq=L.rows.reduce((a,r)=>a+r.avgQty,0);
+      foot='<tr><td class="sbu-col"></td><td class="item-col">TOTAL &middot; '+L.rows.length+' materials</td><td class="uom-col"></td>';
+      L.fmonths.forEach(()=>{ if(showQ)foot+='<td class="num">'+fQ(tq)+'</td>'; if(showV)foot+='<td class="num">'+fN(L.monthly)+'</td>'; if(showR)foot+='<td class="num"></td>'; });
+      foot+='</tr>';
+    }
+    wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
+    MRAT.last={months:L.fmonths,
+      rows:L.rows.map(r=>({it:r.it,cells:L.fmonths.map(()=>({q:r.avgQty,v:r.v,r:r.rate}))})),
+      showQ:showQ,showV:showV,showR:showR,
+      colTotals:L.fmonths.map(()=>({q:L.rows.reduce((a,r)=>a+r.avgQty,0),v:L.monthly}))};
+  }catch(err){
+    wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render LE COGS: '+esc(err.message||err)+'</div>';
+  }
+}
+
+/* ============================ Material COGS Pareto ============================ */
+function periodLabel(){const ms=periodMonths();if(!ms.length)return '';return (state.mode==='MTD'?'MTD ':'YTD ')+monLabel(ms[0])+' – '+monLabel(ms[ms.length-1]);}
+function paretoChart(cv,rows,total){
+  const {x,w,h}=mount(cv);
+  const padL=58,padR=54,padT=14,padB=48; const iw=w-padL-padR, ih=h-padT-padB;
+  let needed=rows.length,cum=0;
+  for(let i=0;i<rows.length;i++){cum+=rows[i].cv;if(cum/total>=0.8){needed=i+1;break;}}
+  const N=Math.min(Math.max(20,needed+3),40,rows.length);
+  const data=rows.slice(0,N);
+  const maxV=Math.max(...data.map(d=>d.cv))||1;
+  const band=iw/Math.max(1,data.length); const bw=Math.max(2,Math.min(26,band*0.68));
+  x.strokeStyle='#2a3550'; x.fillStyle='#93a0bd'; x.font='10px Segoe UI';
+  for(let i=0;i<=4;i++){const y=padT+ih*i/4;x.beginPath();x.moveTo(padL,y);x.lineTo(w-padR,y);x.stroke();x.fillText(fCr(maxV*(1-i/4)),4,y+3);x.fillText((100*(1-i/4)).toFixed(0)+'%',w-padR+6,y+3);}
+  let csum=0;
+  x.strokeStyle='#e0a126'; x.lineWidth=2; x.beginPath();
+  data.forEach((d,i)=>{
+    csum+=d.cv; const cump=csum/total;
+    const cx=padL+band*i+band/2;
+    const bh=d.cv/maxV*ih; const by=padT+ih-bh;
+    x.fillStyle=(i<needed)?'#4f8cff':'#5a6b8c';
+    x.fillRect(cx-bw/2,by,bw,bh);
+    const ly=padT+ih-(cump*ih);
+    if(i===0)x.moveTo(cx,ly); else x.lineTo(cx,ly);
+    d._cx=cx;
+  });
+  x.stroke();
+  const y80=padT+ih-(0.8*ih);
+  x.strokeStyle='#e5484d'; x.setLineDash([5,4]); x.lineWidth=1.5;
+  x.beginPath(); x.moveTo(padL,y80); x.lineTo(w-padR,y80); x.stroke(); x.setLineDash([]);
+  x.fillStyle='#e5484d'; x.font='9px Segoe UI'; x.fillText('80%',padL+2,y80-3);
+  x.fillStyle='#93a0bd'; x.font='8px Segoe UI';
+  data.forEach(d=>{ x.save(); x.translate(d._cx,padT+ih+8); x.rotate(-Math.PI/3); x.textAlign='right'; x.fillText((d.code||'').slice(0,12),0,0); x.restore(); });
+}
+function renderPareto(){
+  const wrap=document.getElementById('paretoTable'); if(!wrap)return;
+  const sum=document.getElementById('paretoSummary');
+  try{
+    const rows=computeItems().filter(r=>r.cv>0).map(r=>({sbu:r.sbu,code:r.code,name:r.name,cat:r.cat,uom:r.uom,cv:r.cv,kind:r.kind})).sort((a,b)=>b.cv-a.cv);
+    const total=rows.reduce((a,r)=>a+r.cv,0);
+    let cum=0,needed80=rows.length;
+    rows.forEach((r,i)=>{cum+=r.cv;r.cum=cum;r.pct=total?r.cv/total:0;r.cump=total?cum/total:0;if(r.cump>=0.8&&needed80===rows.length)needed80=i+1;});
+    const cv=document.getElementById('cvPareto'); if(cv) paretoChart(cv,rows,total);
+    if(sum){
+      sum.innerHTML='<div class="m"><div class="l">Total COGS</div><div class="v">'+fCr(total)+'</div><div class="s">'+periodLabel()+'</div></div>'+
+        '<div class="m"><div class="l">Materials</div><div class="v">'+rows.length+'</div><div class="s">with COGS in period</div></div>'+
+        '<div class="m"><div class="l">Materials to 80%</div><div class="v">'+needed80+'</div><div class="s">'+((needed80&&rows.length)?((needed80/rows.length*100).toFixed(0)+'% of materials'):'')+'</div></div>'+
+        '<div class="m"><div class="l">Top material</div><div class="v small">'+(rows[0]?esc(rows[0].name).slice(0,26):'—')+'</div><div class="s">'+(rows[0]?fCr(rows[0].cv):'')+'</div></div>';
+    }
+    const cnt=document.getElementById('paretoCount'); if(cnt) cnt.textContent='('+rows.length+' materials · '+periodLabel()+')';
+    let html='<table><thead><tr><th>#</th><th>SBU</th><th>Item</th><th>Category</th><th>UOM</th><th class="num">COGS (cr)</th><th class="num">% of total</th><th class="num">Cumulative %</th><th>80%</th></tr></thead><tbody>';
+    rows.forEach((r,i)=>{const top=i<needed80;html+='<tr'+(top?' style="background:#1b2a44"':'')+'><td>'+(i+1)+'</td><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,60)+'</td><td class="muted small">'+esc(r.cat)+'</td><td>'+esc(r.uom||'')+'</td><td class="num">'+fCr(r.cv)+'</td><td class="num">'+fPct(r.pct)+'</td><td class="num">'+fPct(r.cump)+'</td><td>'+(top?'<span class="pill ok">top 80%</span>':'')+'</td></tr>';});
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
+    PARETO.last=rows;
+  }catch(err){ wrap.innerHTML='<div class="warnbox">Could not render Pareto: '+esc(err.message||err)+'</div>'; }
+}
+
 /* ============================ monthly exports ============================ */
 function exportMonthlyChart(){
   const cv=document.getElementById('cvMr'); if(!cv||typeof cv.toDataURL!=='function')return;
@@ -626,6 +796,16 @@ function exportMonthlyTable(){
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='COGS_Monthly_Pivot_'+(MRAT.from||'')+'_to_'+(MRAT.to||'')+'.csv';
+  document.body.appendChild(a);a.click();a.remove();
+}
+function exportParetoCsv(){
+  const rows=PARETO.last; if(!rows||!rows.length){alert('Open the Material COGS Pareto tab first.');return;}
+  const head=['Rank','SBU','ItemCode','ItemName','Category','UOM','COGS_BDT','PctOfTotal','CumulativePct','Top80'];
+  const lines=[head.join(',')];
+  rows.forEach((r,i)=>{lines.push([i+1,r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"','"'+r.cat+'"',r.uom||'',r.cv.toFixed(2),(r.pct*100).toFixed(2),(r.cump*100).toFixed(2),(r.cump<=0.8+1e-9)?'Y':'N'].join(','));});
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='Material_COGS_Pareto_'+(periodLabel()||'').replace(/[^\w]+/g,'_')+'.csv';
   document.body.appendChild(a);a.click();a.remove();
 }
 
@@ -698,6 +878,9 @@ function initFilters(){
   const mm=document.getElementById('mMetric'); if(mm) mm.onchange=e=>{MRAT.metric=e.target.value;renderMonthly();};
   const cbtn=document.getElementById('btnMrChart'); if(cbtn) cbtn.onclick=exportMonthlyChart;
   const tbtn=document.getElementById('btnMrCsv'); if(tbtn) tbtn.onclick=exportMonthlyTable;
+  document.querySelectorAll('#mrView button').forEach(b=>b.onclick=()=>{ MRAT.view=b.dataset.v; if(MRAT.view==='le'){ MRAT.metric='value'; const m2=document.getElementById('mMetric'); if(m2) m2.value='value'; } applyMonthlyView(); renderMonthly(); });
+  const ml=document.getElementById('mLeo'); if(ml) ml.onchange=e=>{MRAT.leFrom=e.target.value;renderMonthly();};
+  const pb=document.getElementById('btnParetoCsv'); if(pb) pb.onclick=exportParetoCsv;
   document.addEventListener('click',e=>{ if(!e.target.closest || !e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 }
 function exportCsv(){
@@ -717,6 +900,7 @@ function renderAll(){
   const rows=computeItems();
   renderExec(rows); renderSbu(rows); renderItems(rows); renderDQ(rows);
   const msec=document.getElementById('tab-monthly'); if(msec && !msec.classList.contains('hidden')) renderMonthly();
+  const psec=document.getElementById('tab-pareto'); if(psec && !psec.classList.contains('hidden')) renderPareto();
   document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
   const warn=document.getElementById('warnBox'); const msgs=[];
   const alelEmpty=DATA.sbus.some(s=>s.code==='ALEL' && !DATA.items.some(i=>i.bu===s.bu));
@@ -731,16 +915,16 @@ function fetchData(silent){
   setStatus('refreshing…');
   return fetch(bust,{cache:'no-store'})
     .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(d=>{ setData(d); syncState(); buildFilterOptions(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
+    .then(d=>{ setData(d); syncState(); MRAT.leFrom=ASOF; buildFilterOptions(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
     .catch(e=>{ setStatus(''); if(!silent) alert('Could not load data.json: '+e.message+'\n(this is normal when opened as a local file - showing the embedded snapshot).'); });
 }
 document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active',x===t));
-  ['exec','sbu','item','dq','monthly'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
+  ['exec','sbu','item','dq','monthly','pareto'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
   renderAll();
 });
 let _rz=null; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>renderAll(),200);});
-window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,renderMonthly:renderMonthly,monthsBetween:monthsBetween};
+window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,renderMonthly:renderMonthly,renderPareto:renderPareto,leCompute:leCompute,monthsBetween:monthsBetween};
 
 /* boot: show the embedded snapshot immediately, then try to load live data.json */
 setData(window.COGS || {sbus:[],items:[],budget:[]});
