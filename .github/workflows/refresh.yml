@@ -3,13 +3,18 @@ name: Refresh COGS data
 # Rebuilds docs/data.json (+ docs/index.html) from the iBOS MCP server and the budget
 # Google Sheet, then commits. GitHub Pages serves the updated site automatically.
 #
-# Required repository secrets (Settings > Secrets and variables > Actions):
-#   COGS_MCP_URL, COGS_MCP_KEY
+# Runs every 2 hours so it recovers automatically when the MCP gateway is available.
+# If the gateway is unavailable (502), the extract step is soft-skipped, the published
+# data is left unchanged, and the dashboard shows a staleness banner.
+#
+# Required repository secrets:
+#   COGS_MCP_URL, COGS_MCP_TOKEN   (enterprise-api-gateway bearer)
 #   COGS_GCLIENT_ID, COGS_GCLIENT_SECRET, COGS_GREFRESH
+#   (optional legacy: COGS_MCP_KEY)
 
 on:
   schedule:
-    - cron: '30 2 * * *'   # daily 02:30 UTC (~08:30 Asia/Dhaka)
+    - cron: '0 */2 * * *'   # every 2 hours (UTC)
   workflow_dispatch:
 
 permissions:
@@ -26,6 +31,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Extract actuals + budget
+        id: extract
+        continue-on-error: true
         shell: pwsh
         env:
           COGS_MCP_URL:        ${{ secrets.COGS_MCP_URL }}
@@ -37,10 +44,12 @@ jobs:
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./.opencode/cogs-extract.ps1
 
       - name: Build dashboard
+        if: hashFiles('.opencode/logs/cogs-data.json') != ''
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./.opencode/cogs-build.ps1
 
       - name: Commit refreshed data
+        if: hashFiles('.opencode/logs/cogs-data.json') != ''
         shell: pwsh
         run: |
           git config user.name  "cogs-refresh-bot"
@@ -53,3 +62,8 @@ jobs:
           } else {
             Write-Host "No data changes."
           }
+
+      - name: Notice when skipped
+        if: hashFiles('.opencode/logs/cogs-data.json') == ''
+        shell: pwsh
+        run: Write-Host "::warning::COGS refresh skipped - MCP gateway unavailable (502). Published data left unchanged."

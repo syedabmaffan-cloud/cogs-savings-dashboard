@@ -926,6 +926,11 @@ function renderAll(){
   const psec=document.getElementById('tab-pareto'); if(psec && !psec.classList.contains('hidden')) renderPareto();
   document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
   const warn=document.getElementById('warnBox'); const msgs=[];
+  const genTs=META.generatedAt?new Date(META.generatedAt):null;
+  if(genTs && !isNaN(genTs.getTime())){
+    const ageDays=Math.floor((Date.now()-genTs.getTime())/86400000);
+    if(ageDays>=3) msgs.push('Data is '+ageDays+' days old (generated '+genTs.toLocaleDateString()+'). The automatic refresh is failing — the ERP gateway is unavailable (502); showing the last good data.');
+  }
   const alelEmpty=DATA.sbus.some(s=>s.code==='ALEL' && !DATA.items.some(i=>i.bu===s.bu));
   if(alelEmpty)msgs.push('ALEL has no direct RM/PM issue-to-shop-floor lines (all its shop-floor issues are classified category "Non RM") — see Data Quality.');
   const noBud=DATA.sbus.filter(s=>!(BINDEX.rowsBySbu[s.code]||[]).length).map(s=>s.code);
