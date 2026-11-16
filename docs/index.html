@@ -213,7 +213,7 @@
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Monthly pivot <span class="sub">SBU &rarr; Item &rarr; month</span></h3><button id="btnMrCsv">Export table (CSV)</button></div>
       <div id="mratTable" class="mrat-wrap"></div>
-      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. <b>Trend chart (SBU level):</b> Actual COGS = direct RM/PM issue value; Budgeted COGS = approved GL 4810001 budget; Actual Sales = net sales-order value. Definitions differ (actual COGS is materials-only), so use the chart for trend/scale, not as a gross-margin calculation. Budget and sales are SBU-level and not affected by item-level filters.</div>
+      <div class="note small">Qty = issue-to-shop-floor quantity; Value = issue value (BDT); Rate = Value &divide; Qty for that month. Blank cell = no activity. <b>Trend chart (SBU level):</b> Actual COGS = direct RM/PM issue value; Budgeted COGS = approved GL 4810001 budget; Actual Sales = net sales-order value. Definitions differ (actual COGS is materials-only), so use the chart for trend/scale, not as a gross-margin calculation. Budget and sales are SBU-level and not affected by item-level filters. <b>Change columns:</b> based on the last month in range (e.g., Nov-26) — YoY vs same month last year, MoM vs prior month, QoQ vs 3 months earlier — on the selected metric (Value when Metric = All). If the last month is month-to-date, the changes are indicative and normalise once the month closes.</div>
     </div>
   </section>
 
@@ -566,6 +566,11 @@ function monthlyItems(){
   });
   return list;
 }
+function shiftMonths(pm,d){let y=+pm.slice(0,4),m=+pm.slice(5,7)+d;while(m<1){m+=12;y--;}while(m>12){m-=12;y++;}return ym(y,m);}
+function metricVal(it,m,metric){const d=it.months[m];if(!d)return null;if(metric==='qty')return d.q;if(metric==='value')return d.v;return d.q?d.v/d.q:null;}
+function pctChange(cur,prev){if(cur==null||prev==null||prev===0)return null;return (cur-prev)/prev;}
+function chgCls(v){return v>0.0001?'neg':(v<-0.0001?'pos':'neu');}
+function chgTxt(v){if(v==null)return 'n/a';return (v>0?'+':'')+(v*100).toFixed(1)+'%';}
 function renderMonthly(){
   const wrap=document.getElementById('mratTable'); if(!wrap)return;
   const sum=document.getElementById('mratSummary');
@@ -587,8 +592,19 @@ function renderMonthly(){
       rows.push({it:it,cells:cells,rq:rq,rv:rv});
     });
     rows.sort((a,b)=> b.rv-a.rv);
+    const lastM=months[months.length-1];
+    const chgMetric=(metric==='all')?'value':metric;
+    rows.forEach(rw=>{
+      const cur=metricVal(rw.it,lastM,chgMetric);
+      rw.chg={yoy:pctChange(cur,metricVal(rw.it,shiftMonths(lastM,-12),chgMetric)),
+              mom:pctChange(cur,metricVal(rw.it,shiftMonths(lastM,-1),chgMetric)),
+              qoq:pctChange(cur,metricVal(rw.it,shiftMonths(lastM,-3),chgMetric))};
+    });
+    const totM=(m)=>{let q=0,v=0;rows.forEach(rw=>{const d=rw.it.months[m];if(d){q+=d.q;v+=d.v;}});if(chgMetric==='qty')return q;if(chgMetric==='value')return v;return q?v/q:null;};
+    const tLast=totM(lastM);
+    const totalChg={yoy:pctChange(tLast,totM(shiftMonths(lastM,-12))),mom:pctChange(tLast,totM(shiftMonths(lastM,-1))),qoq:pctChange(tLast,totM(shiftMonths(lastM,-3)))};
     const colTotals=months.map((m,i)=>{let q=0,v=0;rows.forEach(r=>{q+=r.cells[i].q;v+=r.cells[i].v;});return {q:q,v:v};});
-    MRAT.last={months:months,rows:rows,showQ:showQ,showV:showV,showR:showR,colTotals:colTotals};
+    MRAT.last={months:months,rows:rows,showQ:showQ,showV:showV,showR:showR,colTotals:colTotals,totalChg:totalChg,hasChg:true};
     const inScope=(bu)=> state.sbu.length===0 || state.sbu.includes(bu);
     const actualCogs=months.map(m=>{let s=0;DATA.items.forEach(it=>{if(!inScope(it.bu))return;const d=it.months[m];if(d)s+=d.v;});return s;});
     const budByM={},salByM={};
@@ -612,6 +628,7 @@ function renderMonthly(){
     let h2='<tr>';
     months.forEach(m=>{h1+='<th colspan="'+ncol+'">'+monLabel(m)+'</th>';
       if(showQ)h2+='<th class="num">Qty</th>'; if(showV)h2+='<th class="num">Value</th>'; if(showR)h2+='<th class="num">Rate</th>';});
+    h1+='<th class="num chg" rowspan="2">YoY change</th><th class="num chg" rowspan="2">MoM change</th><th class="num chg" rowspan="2">QoQ change</th>';
     h1+='</tr>'; h2+='</tr>';
     let body='';
     rows.forEach(r=>{
@@ -622,6 +639,7 @@ function renderMonthly(){
         if(showV)body+='<td class="num">'+(c.v?fN(c.v):'')+'</td>';
         if(showR)body+='<td class="num">'+(c.r!=null?f2(c.r):'')+'</td>';
       });
+      body+='<td class="num '+chgCls(r.chg.yoy)+'">'+chgTxt(r.chg.yoy)+'</td><td class="num '+chgCls(r.chg.mom)+'">'+chgTxt(r.chg.mom)+'</td><td class="num '+chgCls(r.chg.qoq)+'">'+chgTxt(r.chg.qoq)+'</td>';
       body+='</tr>';
     });
     let foot='';
@@ -631,6 +649,7 @@ function renderMonthly(){
         if(showQ)foot+='<td class="num">'+(mq?fQ(mq):'')+'</td>';
         if(showV)foot+='<td class="num">'+(mv?fN(mv):'')+'</td>';
         if(showR)foot+='<td class="num"></td>';});
+      foot+='<td class="num '+chgCls(totalChg.yoy)+'">'+chgTxt(totalChg.yoy)+'</td><td class="num '+chgCls(totalChg.mom)+'">'+chgTxt(totalChg.mom)+'</td><td class="num '+chgCls(totalChg.qoq)+'">'+chgTxt(totalChg.qoq)+'</td>';
       foot+='</tr>';
     }
     wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
@@ -708,7 +727,7 @@ function renderMonthlyLE(wrap,sum){
     MRAT.last={months:L.fmonths,
       rows:L.rows.map(r=>({it:r.it,cells:L.fmonths.map(()=>({q:r.avgQty,v:r.v,r:r.rate}))})),
       showQ:showQ,showV:showV,showR:showR,
-      colTotals:L.fmonths.map(()=>({q:L.rows.reduce((a,r)=>a+r.avgQty,0),v:L.monthly}))};
+      colTotals:L.fmonths.map(()=>({q:L.rows.reduce((a,r)=>a+r.avgQty,0),v:L.monthly})),hasChg:false};
   }catch(err){
     wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render LE COGS: '+esc(err.message||err)+'</div>';
   }
@@ -783,15 +802,19 @@ function exportMonthlyTable(){
   const L=MRAT.last; if(!L){alert('Open the Monthly Rate Analysis tab first.');return;}
   const head=['SBU','ItemCode','ItemName','UOM'];
   L.months.forEach(m=>{const lab=monLabel(m); if(L.showQ)head.push(lab+' Qty'); if(L.showV)head.push(lab+' Value'); if(L.showR)head.push(lab+' Rate');});
+  if(L.hasChg) head.push('YoY change','MoM change','QoQ change');
+  const pc=v=>v==null?'':(v*100).toFixed(1)+'%';
   const lines=[head.join(',')];
   L.rows.forEach(rw=>{
     const sc=SBU[rw.it.bu];
     const arr=[sc?sc.code:'', rw.it.code, '"'+String(rw.it.name).replace(/"/g,'""')+'"', rw.it.uom||''];
     rw.cells.forEach(c=>{ if(L.showQ)arr.push(c.q||''); if(L.showV)arr.push(c.v||''); if(L.showR)arr.push(c.r!=null?c.r:''); });
+    if(L.hasChg && rw.chg){ arr.push(pc(rw.chg.yoy),pc(rw.chg.mom),pc(rw.chg.qoq)); }
     lines.push(arr.join(','));
   });
   const tot=['TOTAL','','',''];
   L.months.forEach((m,i)=>{const c=L.colTotals[i]; if(L.showQ)tot.push(c.q||''); if(L.showV)tot.push(c.v||''); if(L.showR)tot.push('');});
+  if(L.hasChg && L.totalChg){ tot.push(pc(L.totalChg.yoy),pc(L.totalChg.mom),pc(L.totalChg.qoq)); }
   lines.push(tot.join(','));
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
