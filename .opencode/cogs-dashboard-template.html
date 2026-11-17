@@ -122,6 +122,7 @@
     <div class="tab" data-tab="dq">Data Quality</div>
     <div class="tab" data-tab="monthly">Material Rate Analysis</div>
     <div class="tab" data-tab="pareto">Material COGS Pareto</div>
+    <div class="tab" data-tab="materialplan">Material Planning</div>
   </div>
 </header>
 
@@ -231,6 +232,32 @@
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Pareto detail <span class="sub" id="paretoCount"></span></h3></div>
       <div id="paretoTable" class="tblwrap" style="max-height:520px"></div>
+    </div>
+  </section>
+
+  <section id="tab-materialplan" class="hidden">
+    <div class="card">
+      <div class="flexhead">
+        <h3 style="margin:0">Material Planning <span class="sub">MRP Run Nov'26–Jan'27 · requirement, shortage &amp; coverage</span></h3>
+        <div class="fld-row">
+          <div class="fld"><label>SBU</label><select id="mpSbu"></select></div>
+          <div class="fld"><label>Month</label><select id="mpMonth"></select></div>
+          <div class="fld"><label>Search</label><input type="text" id="mpSearch" placeholder="code or name" /></div>
+          <div class="fld"><label>&nbsp;</label><label class="small" style="display:flex;gap:6px;align-items:center;height:30px"><input type="checkbox" id="mpShortOnly" /> Shortages only</label></div>
+          <button id="mpReset">Reset</button>
+          <button id="mpCsv" class="primary">Export CSV</button>
+        </div>
+      </div>
+      <div id="mpSummary" class="mrat-sum"></div>
+      <div class="note small">Short (Excl. PR&amp;PO) = stock position excluding open PR/PO; <b>negative = shortage</b>. Coverage = days of stock. Quantities are in each item's own UOM and are not summed across items. Source: MRP Run_Nov'26-Jan'27 Google Sheet.</div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Lowest coverage <span class="sub">(days)</span></h3><div id="mpCoverage"></div></div>
+      <div class="card"><h3>Largest shortages — <span id="mpChartMonth"></span></h3><div id="mpShort"></div></div>
+    </div>
+    <div class="card">
+      <div class="flexhead"><h3 style="margin:0">Material plan <span class="sub" id="mpCount"></span></h3></div>
+      <div id="mpTable" class="tblwrap" style="max-height:560px"></div>
     </div>
   </section>
 </main>
@@ -790,6 +817,88 @@ function renderPareto(){
   }catch(err){ wrap.innerHTML='<div class="warnbox">Could not render Pareto: '+esc(err.message||err)+'</div>'; }
 }
 
+/* ============================ Material Planning (MRP) ============================ */
+const MPLAN={sbu:'',month:0,search:'',shortOnly:false,last:null};
+function mpMeta(){return (DATA && DATA.materialPlanning) ? DATA.materialPlanning : {months:['Nov-26','Dec-26','Jan-27'],sbus:[],rows:[]};}
+function mpFiltered(){
+  const md=mpMeta(); const q=(MPLAN.search||'').toUpperCase(); const m=MPLAN.month;
+  return (md.rows||[]).filter(r=>{
+    if(MPLAN.sbu && r.sbu!==MPLAN.sbu) return false;
+    if(q && !((r.code+' '+r.name).toUpperCase().includes(q))) return false;
+    if(MPLAN.shortOnly && !(r.short && r.short[m]!=null && r.short[m]<0)) return false;
+    return true;
+  });
+}
+function mpN(v){return v==null||isNaN(v)?'':new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(v);}
+function mpCovCls(d){if(d==null)return 'neu';if(d<30)return 'neg';if(d<45)return 'neu';return 'pos';}
+function mpShortCls(v){return v==null?'neu':(v<0?'neg':'pos');}
+function renderMaterialPlanning(){
+  const md=mpMeta(); const wrap=document.getElementById('mpTable'); if(!wrap)return;
+  try{
+    const months=md.months||['Nov-26','Dec-26','Jan-27']; const m=MPLAN.month;
+    const mLabel=months[m]||'';
+    const rows=mpFiltered();
+    const shortRows=rows.filter(r=>r.short && r.short[m]!=null && r.short[m]<0);
+    const cov30=rows.filter(r=>r.covDays!=null && r.covDays<30);
+    const cov7=rows.filter(r=>r.covDays!=null && r.covDays<7);
+    const noDate=rows.filter(r=>!r.covDate);
+    const sum=document.getElementById('mpSummary');
+    if(sum){
+      sum.innerHTML='<div class="m"><div class="l">Items in plan</div><div class="v">'+rows.length+'</div><div class="s">'+(MPLAN.sbu||'All SBU')+'</div></div>'+
+        '<div class="m"><div class="l">Items short ('+esc(mLabel)+')</div><div class="v neg">'+shortRows.length+'</div><div class="s">negative stock position</div></div>'+
+        '<div class="m"><div class="l">Coverage &lt; 30 days</div><div class="v neg">'+cov30.length+'</div><div class="s">'+cov7.length+' under 7 days</div></div>'+
+        '<div class="m"><div class="l">No coverage date</div><div class="v">'+noDate.length+'</div><div class="s">check source data</div></div>';
+    }
+    const cm=document.getElementById('mpChartMonth'); if(cm) cm.textContent=(mLabel);
+    const cov=rows.filter(r=>r.covDays!=null).sort((a,b)=>a.covDays-b.covDays).slice(0,12);
+    const covEl=document.getElementById('mpCoverage');
+    if(covEl){ covEl.innerHTML= !cov.length ? '<div class="muted small">No coverage data.</div>' :
+      '<div class="tblwrap" style="max-height:320px"><table><thead><tr><th>Item</th><th>SBU</th><th class="num">Cov (d)</th><th class="num">Short '+esc(mLabel)+'</th></tr></thead><tbody>'+
+      cov.map(r=>'<tr><td style="white-space:normal">'+esc(r.name).slice(0,40)+'</td><td>'+esc(r.sbu)+'</td><td class="num '+mpCovCls(r.covDays)+'">'+mpN(r.covDays)+'</td><td class="num '+mpShortCls(r.short&&r.short[m])+'">'+(r.short&&r.short[m]!=null?mpN(r.short[m]):'—')+'</td></tr>').join('')+'</tbody></table></div>'; }
+    const shr=rows.filter(r=>r.short && r.short[m]!=null && r.short[m]<0).sort((a,b)=>a.short[m]-b.short[m]).slice(0,12);
+    const shEl=document.getElementById('mpShort');
+    if(shEl){ shEl.innerHTML= !shr.length ? '<div class="muted small">No shortages in '+esc(mLabel)+'.</div>' :
+      '<div class="tblwrap" style="max-height:320px"><table><thead><tr><th>Item</th><th>SBU</th><th>UOM</th><th class="num">Short</th><th class="num">Cov (d)</th></tr></thead><tbody>'+
+      shr.map(r=>'<tr><td style="white-space:normal">'+esc(r.name).slice(0,40)+'</td><td>'+esc(r.sbu)+'</td><td>'+esc(r.uom)+'</td><td class="num neg">'+mpN(r.short[m])+'</td><td class="num '+mpCovCls(r.covDays)+'">'+(r.covDays!=null?mpN(r.covDays):'—')+'</td></tr>').join('')+'</tbody></table></div>'; }
+    const cnt=document.getElementById('mpCount'); if(cnt) cnt.textContent='('+rows.length+' items · '+mLabel+')';
+    const sorted=[...rows].sort((a,b)=>{const av=(a.short&&a.short[m]!=null)?a.short[m]:1e18;const bv=(b.short&&b.short[m]!=null)?b.short[m]:1e18;if(av!==bv)return av-bv;return (b.total3m||0)-(a.total3m||0);});
+    let html='<table><thead><tr><th>SBU</th><th>Code</th><th>Item</th><th>UOM</th>'+
+      '<th class="num">Nov Req</th><th class="num">Dec Req</th><th class="num">Jan Req</th>'+
+      '<th class="num">Nov Short</th><th class="num">Dec Short</th><th class="num">Jan Short</th>'+
+      '<th class="num">Cov (d)</th><th>Cov Date</th><th class="num">3M Req</th><th class="num">WH Stock</th><th class="num">In Transit</th><th class="num">Open PR</th><th class="num">Available</th><th>PR Code</th></tr></thead><tbody>';
+    sorted.forEach(r=>{
+      const rc=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?mpN(r.req[i]):'')+'</td>').join('');
+      const sc=[0,1,2].map(i=>'<td class="num '+mpShortCls(r.short?r.short[i]:null)+'">'+(r.short&&r.short[i]!=null?mpN(r.short[i]):'')+'</td>').join('');
+      html+='<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,52)+'</td><td>'+esc(r.uom)+'</td>'+
+        rc+sc+
+        '<td class="num '+mpCovCls(r.covDays)+'">'+(r.covDays!=null?mpN(r.covDays):'—')+'</td><td class="muted small">'+esc(r.covDate||'—')+'</td>'+
+        '<td class="num">'+(r.total3m!=null?mpN(r.total3m):'')+'</td><td class="num">'+(r.whStock!=null?mpN(r.whStock):'')+'</td>'+
+        '<td class="num">'+(r.inTransit!=null?mpN(r.inTransit):'')+'</td><td class="num">'+(r.openPR!=null?mpN(r.openPR):'')+'</td>'+
+        '<td class="num">'+(r.available!=null?mpN(r.available):'')+'</td><td>'+esc(r.prCode||'')+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
+    MPLAN.last=sorted;
+  }catch(err){ wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render material planning: '+esc(err.message||err)+'</div>'; }
+}
+function initMaterialPlanning(){
+  const md=mpMeta();
+  const sel=document.getElementById('mpSbu');
+  if(sel){ sel.innerHTML='<option value="">All SBU</option>'+((md.sbus||[]).map(s=>'<option>'+esc(s)+'</option>').join('')); sel.value=MPLAN.sbu; }
+  const msel=document.getElementById('mpMonth');
+  if(msel){ const months=md.months||['Nov-26','Dec-26','Jan-27']; msel.innerHTML=months.map((mm,i)=>'<option value="'+i+'">'+esc(mm)+'</option>').join(''); msel.value=String(MPLAN.month); }
+}
+function exportMaterialPlanning(){
+  const rows=MPLAN.last||mpFiltered(); if(!rows.length){alert('Nothing to export.');return;}
+  const head=['SBU','ItemCode','ItemName','Source','UOM','NovReq','DecReq','JanReq','NovShort','DecShort','JanShort','CoverageDays','CoverageDate','Total3M','WarehouseStock','InTransit','OpenPR','AvailableStock','PRCode'];
+  const lines=[head.join(',')];
+  rows.forEach(r=>{lines.push([r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"',r.source||'',r.uom||'',
+    (r.req&&r.req[0]!=null?r.req[0]:''),(r.req&&r.req[1]!=null?r.req[1]:''),(r.req&&r.req[2]!=null?r.req[2]:''),
+    (r.short&&r.short[0]!=null?r.short[0]:''),(r.short&&r.short[1]!=null?r.short[1]:''),(r.short&&r.short[2]!=null?r.short[2]:''),
+    r.covDays!=null?r.covDays:'',r.covDate||'',r.total3m!=null?r.total3m:'',r.whStock!=null?r.whStock:'',r.inTransit!=null?r.inTransit:'',r.openPR!=null?r.openPR:'',r.available!=null?r.available:'',r.prCode||''].join(','));});
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Material_Planning_MRP.csv';document.body.appendChild(a);a.click();a.remove();
+}
+
 /* ============================ monthly exports ============================ */
 function exportMonthlyChart(){
   const cv=document.getElementById('cvMr'); if(!cv||typeof cv.toDataURL!=='function')return;
@@ -904,6 +1013,12 @@ function initFilters(){
   document.querySelectorAll('#mrView button').forEach(b=>b.onclick=()=>{ MRAT.view=b.dataset.v; if(MRAT.view==='le'){ MRAT.metric='value'; const m2=document.getElementById('mMetric'); if(m2) m2.value='value'; } applyMonthlyView(); renderMonthly(); });
   const ml=document.getElementById('mLeo'); if(ml) ml.onchange=e=>{MRAT.leFrom=e.target.value;renderMonthly();};
   const pb=document.getElementById('btnParetoCsv'); if(pb) pb.onclick=exportParetoCsv;
+  const mpS=document.getElementById('mpSbu'); if(mpS) mpS.onchange=e=>{MPLAN.sbu=e.target.value;renderMaterialPlanning();};
+  const mpM=document.getElementById('mpMonth'); if(mpM) mpM.onchange=e=>{MPLAN.month=parseInt(e.target.value,10)||0;renderMaterialPlanning();};
+  const mpQ=document.getElementById('mpSearch'); if(mpQ) mpQ.oninput=e=>{MPLAN.search=e.target.value;renderMaterialPlanning();};
+  const mpC=document.getElementById('mpShortOnly'); if(mpC) mpC.onchange=e=>{MPLAN.shortOnly=e.target.checked;renderMaterialPlanning();};
+  const mpR=document.getElementById('mpReset'); if(mpR) mpR.onclick=()=>{MPLAN.sbu='';MPLAN.month=0;MPLAN.search='';MPLAN.shortOnly=false;const s=document.getElementById('mpSbu');if(s)s.value='';const mm=document.getElementById('mpMonth');if(mm)mm.value='0';const q=document.getElementById('mpSearch');if(q)q.value='';const c=document.getElementById('mpShortOnly');if(c)c.checked=false;renderMaterialPlanning();};
+  const mpX=document.getElementById('mpCsv'); if(mpX) mpX.onclick=exportMaterialPlanning;
   document.addEventListener('click',e=>{ if(!e.target.closest || !e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 }
 function exportCsv(){
@@ -924,6 +1039,7 @@ function renderAll(){
   renderExec(rows); renderSbu(rows); renderItems(rows); renderDQ(rows);
   const msec=document.getElementById('tab-monthly'); if(msec && !msec.classList.contains('hidden')) renderMonthly();
   const psec=document.getElementById('tab-pareto'); if(psec && !psec.classList.contains('hidden')) renderPareto();
+  const mpsec=document.getElementById('tab-materialplan'); if(mpsec && !mpsec.classList.contains('hidden')) renderMaterialPlanning();
   document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
   const warn=document.getElementById('warnBox'); const msgs=[];
   const genTs=META.generatedAt?new Date(META.generatedAt):null;
@@ -943,22 +1059,23 @@ function fetchData(silent){
   setStatus('refreshing…');
   return fetch(bust,{cache:'no-store'})
     .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(d=>{ setData(d); syncState(); MRAT.leFrom=ASOF; buildFilterOptions(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
+    .then(d=>{ setData(d); syncState(); MRAT.leFrom=ASOF; buildFilterOptions(); initMaterialPlanning(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
     .catch(e=>{ setStatus(''); if(!silent) alert('Could not load data.json: '+e.message+'\n(this is normal when opened as a local file - showing the embedded snapshot).'); });
 }
 document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active',x===t));
-  ['exec','sbu','item','dq','monthly','pareto'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
+  ['exec','sbu','item','dq','monthly','pareto','materialplan'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
   renderAll();
 });
 let _rz=null; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>renderAll(),200);});
-window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,renderMonthly:renderMonthly,renderPareto:renderPareto,leCompute:leCompute,monthsBetween:monthsBetween};
+window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,MPLAN:MPLAN,renderMonthly:renderMonthly,renderPareto:renderPareto,renderMaterialPlanning:renderMaterialPlanning,leCompute:leCompute,monthsBetween:monthsBetween};
 
 /* boot: show the embedded snapshot immediately, then try to load live data.json */
 setData(window.COGS || {sbus:[],items:[],budget:[]});
 syncState();
 initFilters();
 buildFilterOptions();
+initMaterialPlanning();
 initMonthlyControls();
 refreshMonths();
 renderAll();

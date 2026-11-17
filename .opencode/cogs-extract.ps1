@@ -156,6 +156,13 @@ function Get-GoogleToken {
             -ContentType 'application/x-www-form-urlencoded').access_token
 }
 
+function Invoke-SheetsGet([string]$Url, [hashtable]$Headers) {
+  for ($try = 1; $try -le 10; $try++) {
+    try { return Invoke-RestMethod -Uri $Url -Headers $Headers -TimeoutSec 90 }
+    catch { if ($try -eq 10) { throw }; Start-Sleep -Seconds 2 }
+  }
+}
+
 # month-label -> 'yyyy-MM' for the budget tab (Jul 2026 .. Jun 2027)
 $MonMap = @{ 'Jan'='01'; 'Feb'='02'; 'Mar'='03'; 'Apr'='04'; 'May'='05'; 'Jun'='06';
              'Jul'='07'; 'Aug'='08'; 'Sep'='09'; 'Oct'='10'; 'Nov'='11'; 'Dec'='12' }
@@ -319,6 +326,82 @@ foreach ($r in $salesRows) {
 }
 Write-Host ("[cogs] budgetCogs rows: {0} | sales rows: {1}" -f $budgetCogs.Count, $salesList.Count)
 
+# ================================================================ 2d. MATERIAL PLANNING (MRP workbook)
+$materialPlan = [pscustomobject]@{
+  source = "MRP Run_Nov'26-Jan'27 (Google Sheet)"
+  months = @('Nov-26','Dec-26','Jan-27')
+  sbus   = @()
+  rows   = @()
+}
+try {
+  $mpSheetId = '1QwUvRKQpz46D962gXSLKFqEBgdVgdnV9SZyYBSJ7hoI'
+  Write-Host '[cogs] reading MRP / material planning workbook ...'
+  $mpToken = Get-GoogleToken
+  $mpHdr = @{ Authorization = "Bearer $mpToken" }
+  $metaUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + $mpSheetId + '?fields=sheets.properties(sheetId,title)'
+  $metaMp = Invoke-SheetsGet $metaUrl $mpHdr
+  $mpTabs = @($metaMp.sheets | Where-Object { $_.properties.title -like '*_MRP Nov*' })
+  $mpRows = New-Object System.Collections.Generic.List[object]
+  $mpSbus = New-Object System.Collections.Generic.List[string]
+  foreach ($t in $mpTabs) {
+    $title = $t.properties.title
+    $sbu = ($title -split '_')[0]
+    if (-not $mpSbus.Contains($sbu)) { $mpSbus.Add($sbu) }
+    $esc = $title.Replace("'","''")
+    $rng = [uri]::EscapeDataString("'${esc}'!A1:AC2000")
+    $u = 'https://sheets.googleapis.com/v4/spreadsheets/' + $mpSheetId + '/values/' + $rng + '?majorDimension=ROWS'
+    $vals = (Invoke-SheetsGet $u $mpHdr).values
+    if (-not $vals -or $vals.Count -lt 2) { continue }
+    $hdrN = @($vals[0] | ForEach-Object { ("$($_)".Trim().ToLower() -replace '[^a-z0-9]','') })
+    $find = {
+      param($opts)
+      foreach ($o in $opts) {
+        $k = ($o.ToLower() -replace '[^a-z0-9]','')
+        for ($i = 0; $i -lt $hdrN.Count; $i++) { if ($hdrN[$i] -eq $k) { return $i } }
+      }
+      return -1
+    }
+    $iCode = & $find @('Item Code'); $iName = & $find @('Item Name'); $iUom = & $find @('UOM')
+    $iReq = @((& $find @('Nov Req Qty')), (& $find @('Dec Req Qty')), (& $find @('Jan Req Qty')))
+    $iSh  = @((& $find @('Nov Short (Excl. PR&PO)')), (& $find @('Dec Short (Excl. PR&PO)')), (& $find @('Jan Short (Excl. PR&PO)')))
+    $iCov = & $find @('Coverage (Days)'); $iCovDate = & $find @('Coverage Date'); $i3m = & $find @('Total QTY (3M)')
+    $iWh = & $find @('Warehouse Stock'); $iIt = & $find @('In Transit'); $iItA = & $find @('Actual in transit'); $iOpenPR = & $find @('Open PR')
+    $iDead = & $find @('Dead Stock'); $iAvail = & $find @('Available Stock'); $iReqd = & $find @('Requirment','Requirement'); $iPR = & $find @('PR Code')
+    $iRol = & $find @('Reorder Level'); $iRoq = & $find @('Reorder Quantity'); $iSs = & $find @('Safety Stock')
+    $iSsQ = & $find @('Safety stock in qty (Inventory input)'); $iSsD = & $find @('Safety Stock in Days (Procurement input)')
+    for ($r = 1; $r -lt $vals.Count; $r++) {
+      $row = $vals[$r]
+      $cell = { param($idx) if ($idx -ge 0 -and $idx -lt $row.Count) { return "$($row[$idx])" } else { return '' } }
+      $code = "$(& $cell $iCode)".Trim()
+      if (-not $code) { continue }
+      $rawName = "$(& $cell $iName)".Trim()
+      $parts = @($rawName -split "`r?`n" | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+      $src = ''
+      if ($parts.Count -gt 1 -and $parts[-1] -match '^(?i)(local|import)$') { $src = $parts[-1]; $parts = @($parts[0..($parts.Count-2)]) }
+      $covRaw = "$(& $cell $iCov)"
+      $mpRows.Add([pscustomobject]@{
+        sbu = $sbu; code = $code; name = ($parts -join ' '); source = $src; uom = "$(& $cell $iUom)".Trim()
+        req   = @((ToNum (& $cell $iReq[0])), (ToNum (& $cell $iReq[1])), (ToNum (& $cell $iReq[2])))
+        short = @((ToNum (& $cell $iSh[0])), (ToNum (& $cell $iSh[1])), (ToNum (& $cell $iSh[2])))
+        covDays = (ToNum ($covRaw -replace '[^0-9\.\-]','')); covDate = "$(& $cell $iCovDate)".Trim(); total3m = (ToNum (& $cell $i3m))
+        whStock = (ToNum (& $cell $iWh)); inTransit = (ToNum (& $cell $iIt)); actualInTransit = (ToNum (& $cell $iItA)); openPR = (ToNum (& $cell $iOpenPR))
+        deadStock = (ToNum (& $cell $iDead)); available = (ToNum (& $cell $iAvail)); requirement = (ToNum (& $cell $iReqd)); prCode = "$(& $cell $iPR)".Trim()
+        reorderLevel = (ToNum (& $cell $iRol)); reorderQty = (ToNum (& $cell $iRoq)); safetyStock = (ToNum (& $cell $iSs))
+        ssQty = (ToNum (& $cell $iSsQ)); ssDays = (ToNum (& $cell $iSsD))
+      })
+    }
+  }
+  $materialPlan = [pscustomobject]@{
+    source = "MRP Run_Nov'26-Jan'27 (Google Sheet)"
+    months = @('Nov-26','Dec-26','Jan-27')
+    sbus   = $mpSbus.ToArray()
+    rows   = $mpRows.ToArray()
+  }
+  Write-Host ("[cogs] material planning: {0} rows across {1} SBUs" -f $mpRows.Count, $mpSbus.Count)
+} catch {
+  Write-Host ("[cogs] material planning skipped: " + $_.Exception.Message)
+}
+
 # ================================================================ 3. WRITE
 $data = [pscustomobject]@{
   generatedAt = (Get-Date).ToString('s')
@@ -329,6 +412,7 @@ $data = [pscustomobject]@{
   budget      = $budget
   budgetCogs  = $budgetCogs
   sales       = $salesList
+  materialPlanning = $materialPlan
 }
 $json = $data | ConvertTo-Json -Depth 12 -Compress
 [IO.File]::WriteAllText($OutJson, $json, (New-Object Text.UTF8Encoding($false)))

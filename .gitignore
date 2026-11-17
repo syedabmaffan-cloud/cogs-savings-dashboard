@@ -5,6 +5,7 @@
 # logs
 .opencode/logs/*.log
 .opencode/logs/cogs-data.json
+docs/material-planning.json
 
 # generated site is committed on purpose (GitHub Pages source = /docs)
 node_modules/
