@@ -248,14 +248,17 @@
           <div class="fld"><label>SBU</label><select id="mpSbu"></select></div>
           <div class="fld"><label>Month</label><select id="mpMonth"></select></div>
           <div class="fld"><label>Search</label><input type="text" id="mpSearch" placeholder="code or name" /></div>
+          <div class="fld"><label>Your name</label><input type="text" id="mpUser" placeholder="for the ETA log" style="min-width:130px" /></div>
           <div class="fld"><label>&nbsp;</label><label class="small" style="display:flex;gap:6px;align-items:center;height:30px"><input type="checkbox" id="mpShortOnly" /> Shortages only</label></div>
           <button id="mpReset">Reset</button>
           <button id="mpClearEta">Clear ETA</button>
+          <button id="mpReloadEta">Refresh ETA</button>
           <button id="mpCsv" class="primary">Export CSV</button>
         </div>
       </div>
+      <div class="note small" id="mpSyncNote">ETA sync: starting…</div>
       <div id="mpSummary" class="mrat-sum"></div>
-      <div class="note small">Short (Excl. PR&amp;PO) = stock position excluding open PR/PO; <b>negative = shortage</b>. Coverage = days of stock. Quantities are in each item's own UOM and are not summed across items. Source: MRP Run_Nov'26-Jan'27 Google Sheet. <b>ETA 1–3 and ETA Qty 1–3 are editable</b>; values are saved in this browser and included in Export CSV.</div>
+      <div class="note small">Short (Excl. PR&amp;PO) = stock position excluding open PR/PO; <b>negative = shortage</b>. Coverage = days of stock. Quantities are in each item's own UOM and are not summed across items. Source: MRP Run_Nov'26-Jan'27 Google Sheet. <b>ETA 1–3 and ETA Qty 1–3 are shared with everyone</b> — enter your name, edit the cells, and they save to the shared register; the page refreshes them automatically. Changes are also included in Export CSV.</div>
     </div>
     <div class="grid2">
       <div class="card"><h3>Lowest coverage <span class="sub">(days)</span></h3><div id="mpCoverage"></div></div>
@@ -825,18 +828,138 @@ function renderPareto(){
 
 /* ============================ Material Planning (MRP) ============================ */
 const MPLAN={sbu:'',month:0,search:'',shortOnly:false,last:null};
-const MP_ETA_KEY='cogs_mp_eta_v1';
+
+/* Shared ETA store (Supabase PostgREST). Leave url/anonKey empty for local-only mode.
+   The anon key is public by design; row-level security in Supabase protects the data. */
+const ETA_CFG={url:'',anonKey:'',table:'mp_eta'};
+const MP_ETA_KEY='cogs_mp_eta_v1';     /* local mirror of the shared values */
+const MP_USER_KEY='cogs_mp_user';      /* display name written to the audit trail */
+const MP_DIRTY=new Set();              /* keys changed here, not yet saved upstream */
+const ETA_SYNC={state:'init',err:'',lastAt:null,timer:null,retry:null,started:false};
 function mpMeta(){return (DATA && DATA.materialPlanning) ? DATA.materialPlanning : {months:['Nov-26','Dec-26','Jan-27'],sbus:[],rows:[]};}
 function mpEtaKey(r){return String(r.sbu||'')+'|'+String(r.code||'');}
-function mpEtaAll(){try{return JSON.parse(localStorage.getItem(MP_ETA_KEY)||'{}')||{};}catch(e){return {};}}
-function mpEtaFor(store,r){const a=(store||{})[mpEtaKey(r)]||{};return {eta:Array.isArray(a.eta)?a.eta:['','',''],qty:Array.isArray(a.qty)?a.qty:[null,null,null]};}
+function mpEtaKeyParts(k){const i=k.indexOf('|');return {sbu:k.slice(0,i),code:k.slice(i+1)};}
+function mpEtaAll(){try{const v=JSON.parse(localStorage.getItem(MP_ETA_KEY)||'{}');return (v&&typeof v==='object')?v:{};}catch(e){return {};}}
+function mpEtaCacheSet(all){try{localStorage.setItem(MP_ETA_KEY,JSON.stringify(all));}catch(e){}}
+function mpEtaFor(store,r){const a=(store||{})[mpEtaKey(r)]||{};return {eta:Array.isArray(a.eta)?a.eta:['','',''],qty:Array.isArray(a.qty)?a.qty:[null,null,null],updated_by:a.updated_by||'',updated_at:a.updated_at||''};}
+function mpEtaOnline(){return !!(ETA_CFG.url&&ETA_CFG.anonKey);}
+function mpEtaHeaders(extra){const h={apikey:ETA_CFG.anonKey,Authorization:'Bearer '+ETA_CFG.anonKey};return Object.assign(h,extra||{});}
+function mpEtaUserName(){try{return (localStorage.getItem(MP_USER_KEY)||'').trim();}catch(e){return '';}}
+function mpEtaSetUserName(v){try{localStorage.setItem(MP_USER_KEY,String(v||'').trim());}catch(e){}}
+function mpEtaNormRow(row){
+  const d=v=>v?String(v).slice(0,10):'';
+  const n=v=>(v==null||v==='')?null:Number(v);
+  return {eta:[d(row.eta1),d(row.eta2),d(row.eta3)],qty:[n(row.eta_qty1),n(row.eta_qty2),n(row.eta_qty3)],updated_by:row.updated_by||'',updated_at:row.updated_at||''};
+}
+function mpEtaSetSync(state,err){
+  ETA_SYNC.state=state; ETA_SYNC.err=err||'';
+  if(state==='ok') ETA_SYNC.lastAt=new Date();
+  const el=document.getElementById('mpSyncNote'); if(!el)return;
+  const t=ETA_SYNC.lastAt||new Date();
+  const hh=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+  let msg='ETA sync: ready.';
+  if(state==='loading') msg='ETA sync: loading shared values…';
+  else if(state==='saving') msg='ETA sync: saving…';
+  else if(state==='ok') msg='ETA sync: shared values up to date · '+hh;
+  else if(state==='local') msg='ETA sync: local only — shared saving is not configured in this build.';
+  else if(state==='err') msg='ETA sync: shared store unreachable — '+err+'. Changes are kept locally and will retry.';
+  el.textContent=msg;
+  el.classList.toggle('neg',state==='err');
+}
+async function mpEtaLoad(opts){
+  opts=opts||{};
+  if(!mpEtaOnline()){ mpEtaSetSync('local'); return false; }
+  if(!opts.silent) mpEtaSetSync('loading');
+  try{
+    const base=ETA_CFG.url.replace(/\/+$/,'');
+    const u=base+'/rest/v1/'+encodeURIComponent(ETA_CFG.table)+'?select=sbu,item_code,eta1,eta_qty1,eta2,eta_qty2,eta3,eta_qty3,updated_by,updated_at&order=updated_at.desc&limit=20000';
+    const res=await fetch(u,{headers:mpEtaHeaders({Accept:'application/json'}),cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const rows=await res.json();
+    const all=mpEtaAll(); let changed=false;
+    (rows||[]).forEach(row=>{
+      const k=String(row.sbu||'')+'|'+String(row.item_code||'');
+      if(MP_DIRTY.has(k)) return;
+      const nv=mpEtaNormRow(row); const old=all[k];
+      if(!old||JSON.stringify(old.eta)!==JSON.stringify(nv.eta)||JSON.stringify(old.qty)!==JSON.stringify(nv.qty)||old.updated_at!==nv.updated_at){all[k]=nv;changed=true;}
+    });
+    if(changed) mpEtaCacheSet(all);
+    mpEtaSetSync('ok');
+    if(changed){const ae=document.activeElement;if(!(ae&&ae.closest&&ae.closest('#mpTable')))renderMaterialPlanning();}
+    return true;
+  }catch(e){
+    mpEtaSetSync('err',e&&e.message?e.message:String(e));
+    return false;
+  }
+}
 function mpEtaSave(key,field,idx,val){
-  const all=mpEtaAll(); const cur=all[key]||{eta:['','',''],qty:[null,null,null]};
-  cur.eta=Array.isArray(cur.eta)?cur.eta:['','','']; cur.qty=Array.isArray(cur.qty)?cur.qty:[null,null,null];
-  if(field==='eta'){ cur.eta[idx]=val||''; }
+  const all=mpEtaAll();
+  const cur=all[key]||{eta:['','',''],qty:[null,null,null],updated_by:'',updated_at:''};
+  cur.eta=Array.isArray(cur.eta)?cur.eta.slice():['','',''];
+  cur.qty=Array.isArray(cur.qty)?cur.qty.slice():[null,null,null];
+  if(field==='eta') cur.eta[idx]=val?String(val).slice(0,10):'';
   else { const n=Number(val); cur.qty[idx]=(val===''||val==null||!isFinite(n))?null:n; }
-  all[key]=cur;
-  try{ localStorage.setItem(MP_ETA_KEY,JSON.stringify(all)); }catch(e){}
+  cur.updated_by=mpEtaUserName()||'anonymous';
+  cur.updated_at=new Date().toISOString();
+  all[key]=cur; mpEtaCacheSet(all);
+  MP_DIRTY.add(key);
+  mpEtaSchedule();
+}
+function mpEtaSchedule(){
+  if(!mpEtaOnline()){ mpEtaSetSync('local'); return; }
+  mpEtaSetSync('saving');
+  if(ETA_SYNC.timer) clearTimeout(ETA_SYNC.timer);
+  ETA_SYNC.timer=setTimeout(()=>{ETA_SYNC.timer=null;mpEtaFlush();},800);
+}
+async function mpEtaFlush(){
+  if(ETA_SYNC.timer){clearTimeout(ETA_SYNC.timer);ETA_SYNC.timer=null;}
+  if(!mpEtaOnline()){ MP_DIRTY.clear(); mpEtaSetSync('local'); return; }
+  if(!MP_DIRTY.size) return;
+  const keys=[...MP_DIRTY]; MP_DIRTY.clear();
+  const all=mpEtaAll();
+  const payload=keys.filter(k=>all[k]).map(k=>{
+    const p=mpEtaKeyParts(k); const v=all[k];
+    return {sbu:p.sbu,item_code:p.code,
+      eta1:v.eta[0]||null,eta_qty1:(v.qty[0]==null?null:v.qty[0]),
+      eta2:v.eta[1]||null,eta_qty2:(v.qty[1]==null?null:v.qty[1]),
+      eta3:v.eta[2]||null,eta_qty3:(v.qty[2]==null?null:v.qty[2]),
+      updated_by:v.updated_by||mpEtaUserName()||'anonymous'};
+  });
+  if(!payload.length)return;
+  mpEtaSetSync('saving');
+  try{
+    const base=ETA_CFG.url.replace(/\/+$/,'');
+    const url=base+'/rest/v1/'+encodeURIComponent(ETA_CFG.table)+'?on_conflict=sbu,item_code';
+    for(let i=0;i<payload.length;i+=200){
+      const res=await fetch(url,{method:'POST',headers:mpEtaHeaders({'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify(payload.slice(i,i+200))});
+      if(!res.ok){let t='';try{t=(await res.text()).slice(0,300);}catch(e){}throw new Error('HTTP '+res.status+(t?' — '+t:''));}
+    }
+    mpEtaSetSync('ok');
+  }catch(e){
+    keys.forEach(k=>MP_DIRTY.add(k));
+    mpEtaSetSync('err',e&&e.message?e.message:String(e));
+    if(ETA_SYNC.retry) clearTimeout(ETA_SYNC.retry);
+    ETA_SYNC.retry=setTimeout(()=>{ETA_SYNC.retry=null;mpEtaFlush();},5000);
+  }
+}
+function mpEtaBoot(){
+  if(ETA_SYNC.started)return; ETA_SYNC.started=true;
+  const u=document.getElementById('mpUser');
+  if(u){ u.value=mpEtaUserName(); u.oninput=()=>mpEtaSetUserName(u.value); }
+  const rl=document.getElementById('mpReloadEta'); if(rl) rl.onclick=()=>mpEtaLoad({});
+  mpEtaLoad({});
+  if(mpEtaOnline()){
+    setInterval(()=>{
+      if(document.hidden)return;
+      if(MP_DIRTY.size||ETA_SYNC.timer)return;
+      const sec=document.getElementById('tab-materialplan');
+      if(!sec||sec.classList.contains('hidden'))return;
+      const ae=document.activeElement;
+      if(ae&&ae.closest&&ae.closest('#mpTable'))return;
+      mpEtaLoad({silent:true});
+    },90000);
+    window.addEventListener('online',()=>{if(MP_DIRTY.size)mpEtaFlush();});
+  }
 }
 function mpFiltered(){
   const md=mpMeta(); const q=(MPLAN.search||'').toUpperCase(); const m=MPLAN.month;
@@ -890,8 +1013,9 @@ function renderMaterialPlanning(){
       const rc=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?mpN(r.req[i]):'')+'</td>').join('');
       const sc=[0,1,2].map(i=>'<td class="num '+mpShortCls(r.short?r.short[i]:null)+'">'+(r.short&&r.short[i]!=null?mpN(r.short[i]):'')+'</td>').join('');
       const e=mpEtaFor(etaStore,r);
-      const etaCells=[0,1,2].map(i=>'<td class="eta-cell"><input type="date" class="eta-date" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+esc(e.eta[i]||'')+'"></td>'+
-        '<td class="eta-cell num"><input type="number" step="any" min="0" class="eta-qty" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+(e.qty[i]!=null?esc(e.qty[i]):'')+'" placeholder="qty"></td>').join('');
+      const tip=e.updated_by?('Last updated by '+e.updated_by+(e.updated_at?' · '+new Date(e.updated_at).toLocaleString():'')):'';
+      const etaCells=[0,1,2].map(i=>'<td class="eta-cell"><input type="date" class="eta-date" title="'+esc(tip)+'" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+esc(e.eta[i]||'')+'"></td>'+
+        '<td class="eta-cell num"><input type="number" step="any" min="0" class="eta-qty" title="'+esc(tip)+'" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+(e.qty[i]!=null?esc(e.qty[i]):'')+'" placeholder="qty"></td>').join('');
       html+='<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,52)+'</td><td>'+esc(r.uom)+'</td>'+
         rc+sc+etaCells+
         '<td class="num '+mpCovCls(r.covDays)+'">'+(r.covDays!=null?mpN(r.covDays):'—')+'</td><td class="muted small">'+esc(r.covDate||'—')+'</td>'+
@@ -1047,9 +1171,17 @@ function initFilters(){
   const mpR=document.getElementById('mpReset'); if(mpR) mpR.onclick=()=>{MPLAN.sbu='';MPLAN.month=0;MPLAN.search='';MPLAN.shortOnly=false;const s=document.getElementById('mpSbu');if(s)s.value='';const mm=document.getElementById('mpMonth');if(mm)mm.value='0';const q=document.getElementById('mpSearch');if(q)q.value='';const c=document.getElementById('mpShortOnly');if(c)c.checked=false;renderMaterialPlanning();};
   const mpCE=document.getElementById('mpClearEta'); if(mpCE) mpCE.onclick=()=>{
     const rows=mpFiltered(); if(!rows.length)return;
-    if(!confirm('Clear ETA dates and quantities for the '+rows.length+' item(s) currently shown?'))return;
-    const all=mpEtaAll(); rows.forEach(r=>{delete all[mpEtaKey(r)];});
-    try{ localStorage.setItem(MP_ETA_KEY,JSON.stringify(all)); }catch(e){}
+    if(!confirm('Clear ETA dates and quantities for the '+rows.length+' item(s) currently shown? This also clears them for everyone.'))return;
+    const all=mpEtaAll(); let n=0;
+    rows.forEach(r=>{
+      const k=mpEtaKey(r); const cur=all[k]; if(!cur)return;
+      const has=(Array.isArray(cur.eta)&&cur.eta.some(Boolean))||(Array.isArray(cur.qty)&&cur.qty.some(v=>v!=null));
+      if(!has)return;
+      all[k]={eta:['','',''],qty:[null,null,null],updated_by:mpEtaUserName()||'anonymous',updated_at:new Date().toISOString()};
+      MP_DIRTY.add(k); n++;
+    });
+    mpEtaCacheSet(all);
+    if(n) mpEtaSchedule();
     renderMaterialPlanning();
   };
   const mpX=document.getElementById('mpCsv'); if(mpX) mpX.onclick=exportMaterialPlanning;
@@ -1113,6 +1245,7 @@ initMaterialPlanning();
 initMonthlyControls();
 refreshMonths();
 renderAll();
+mpEtaBoot();
 fetchData(true);
 </script>
 </body>
