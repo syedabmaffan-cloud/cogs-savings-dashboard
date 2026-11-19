@@ -3,9 +3,9 @@ name: Refresh COGS data
 # Rebuilds docs/data.json (+ docs/index.html) from the iBOS MCP server and the budget
 # Google Sheet, then commits. GitHub Pages serves the updated site automatically.
 #
-# Runs every 2 hours so it recovers automatically when the MCP gateway is available.
-# If the gateway is unavailable (502), the extract step is soft-skipped, the published
-# data is left unchanged, and the dashboard shows a staleness banner.
+# Runs daily at 01:00 UTC. If the gateway is unavailable (502), the extract step is
+# soft-skipped, the published data is left unchanged, and the dashboard shows a
+# staleness banner. Use workflow_dispatch to retry manually.
 #
 # Required repository secrets:
 #   COGS_MCP_URL, COGS_MCP_TOKEN   (enterprise-api-gateway bearer)
@@ -14,7 +14,7 @@ name: Refresh COGS data
 
 on:
   schedule:
-    - cron: '0 */2 * * *'   # every 2 hours (UTC)
+    - cron: '0 1 * * *'   # daily at 01:00 UTC
   workflow_dispatch:
 
 permissions:
