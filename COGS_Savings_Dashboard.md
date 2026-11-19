@@ -107,7 +107,8 @@ The dashboard is self-contained, but the recommended way to share it is **GitHub
 - GitHub Pages source = **`main` branch → `/docs`** → live at `https://<user>.github.io/<repo>/`.
 - `docs/index.html` has a **↻ Refresh data** button that reloads `docs/data.json` (no rebuild needed).
 - **Automatic refresh:** `.github/workflows/refresh.yml` re-extracts from the MCP server + Google Sheet
-  daily (and on demand) and commits `docs/`. Needs repo secrets `COGS_MCP_URL`, `COGS_MCP_KEY`,
+  every 2 hours (and on demand) and commits `docs/`. This gives at least one daily refresh and retries
+  automatically if the MCP gateway is temporarily unavailable. Needs repo secrets `COGS_MCP_URL`, `COGS_MCP_KEY`,
   `COGS_GCLIENT_ID`, `COGS_GCLIENT_SECRET`, `COGS_GREFRESH`.
 - **Manual refresh:** `cogs-extract.ps1` → `cogs-build.ps1` → `git add docs && git commit && git push`.
 
