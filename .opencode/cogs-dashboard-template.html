@@ -26,6 +26,11 @@
   .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
   select,input[type=text]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px 8px;font-size:12.5px;min-width:120px}
   input[type=text]{min-width:180px}
+  #mpTable input[type=date],#mpTable input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:3px 5px;font-size:11.5px;box-sizing:border-box;color-scheme:dark}
+  #mpTable input[type=date]{min-width:128px}
+  #mpTable input[type=number]{min-width:82px;text-align:right}
+  #mpTable input[type=date]:focus,#mpTable input[type=number]:focus{outline:1px solid var(--acc);border-color:var(--acc)}
+  #mpTable td.eta-cell{padding:3px 4px}
   button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12.5px}
   button:hover{border-color:var(--acc)}
   button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
@@ -245,11 +250,12 @@
           <div class="fld"><label>Search</label><input type="text" id="mpSearch" placeholder="code or name" /></div>
           <div class="fld"><label>&nbsp;</label><label class="small" style="display:flex;gap:6px;align-items:center;height:30px"><input type="checkbox" id="mpShortOnly" /> Shortages only</label></div>
           <button id="mpReset">Reset</button>
+          <button id="mpClearEta">Clear ETA</button>
           <button id="mpCsv" class="primary">Export CSV</button>
         </div>
       </div>
       <div id="mpSummary" class="mrat-sum"></div>
-      <div class="note small">Short (Excl. PR&amp;PO) = stock position excluding open PR/PO; <b>negative = shortage</b>. Coverage = days of stock. Quantities are in each item's own UOM and are not summed across items. Source: MRP Run_Nov'26-Jan'27 Google Sheet.</div>
+      <div class="note small">Short (Excl. PR&amp;PO) = stock position excluding open PR/PO; <b>negative = shortage</b>. Coverage = days of stock. Quantities are in each item's own UOM and are not summed across items. Source: MRP Run_Nov'26-Jan'27 Google Sheet. <b>ETA 1–3 and ETA Qty 1–3 are editable</b>; values are saved in this browser and included in Export CSV.</div>
     </div>
     <div class="grid2">
       <div class="card"><h3>Lowest coverage <span class="sub">(days)</span></h3><div id="mpCoverage"></div></div>
@@ -819,7 +825,19 @@ function renderPareto(){
 
 /* ============================ Material Planning (MRP) ============================ */
 const MPLAN={sbu:'',month:0,search:'',shortOnly:false,last:null};
+const MP_ETA_KEY='cogs_mp_eta_v1';
 function mpMeta(){return (DATA && DATA.materialPlanning) ? DATA.materialPlanning : {months:['Nov-26','Dec-26','Jan-27'],sbus:[],rows:[]};}
+function mpEtaKey(r){return String(r.sbu||'')+'|'+String(r.code||'');}
+function mpEtaAll(){try{return JSON.parse(localStorage.getItem(MP_ETA_KEY)||'{}')||{};}catch(e){return {};}}
+function mpEtaFor(store,r){const a=(store||{})[mpEtaKey(r)]||{};return {eta:Array.isArray(a.eta)?a.eta:['','',''],qty:Array.isArray(a.qty)?a.qty:[null,null,null]};}
+function mpEtaSave(key,field,idx,val){
+  const all=mpEtaAll(); const cur=all[key]||{eta:['','',''],qty:[null,null,null]};
+  cur.eta=Array.isArray(cur.eta)?cur.eta:['','','']; cur.qty=Array.isArray(cur.qty)?cur.qty:[null,null,null];
+  if(field==='eta'){ cur.eta[idx]=val||''; }
+  else { const n=Number(val); cur.qty[idx]=(val===''||val==null||!isFinite(n))?null:n; }
+  all[key]=cur;
+  try{ localStorage.setItem(MP_ETA_KEY,JSON.stringify(all)); }catch(e){}
+}
 function mpFiltered(){
   const md=mpMeta(); const q=(MPLAN.search||'').toUpperCase(); const m=MPLAN.month;
   return (md.rows||[]).filter(r=>{
@@ -862,15 +880,20 @@ function renderMaterialPlanning(){
       shr.map(r=>'<tr><td style="white-space:normal">'+esc(r.name).slice(0,40)+'</td><td>'+esc(r.sbu)+'</td><td>'+esc(r.uom)+'</td><td class="num neg">'+mpN(r.short[m])+'</td><td class="num '+mpCovCls(r.covDays)+'">'+(r.covDays!=null?mpN(r.covDays):'—')+'</td></tr>').join('')+'</tbody></table></div>'; }
     const cnt=document.getElementById('mpCount'); if(cnt) cnt.textContent='('+rows.length+' items · '+mLabel+')';
     const sorted=[...rows].sort((a,b)=>{const av=(a.short&&a.short[m]!=null)?a.short[m]:1e18;const bv=(b.short&&b.short[m]!=null)?b.short[m]:1e18;if(av!==bv)return av-bv;return (b.total3m||0)-(a.total3m||0);});
+    const etaStore=mpEtaAll();
     let html='<table><thead><tr><th>SBU</th><th>Code</th><th>Item</th><th>UOM</th>'+
       '<th class="num">Nov Req</th><th class="num">Dec Req</th><th class="num">Jan Req</th>'+
       '<th class="num">Nov Short</th><th class="num">Dec Short</th><th class="num">Jan Short</th>'+
+      '<th>ETA 1</th><th class="num">ETA Qty 1</th><th>ETA 2</th><th class="num">ETA Qty 2</th><th>ETA 3</th><th class="num">ETA Qty 3</th>'+
       '<th class="num">Cov (d)</th><th>Cov Date</th><th class="num">3M Req</th><th class="num">WH Stock</th><th class="num">In Transit</th><th class="num">Open PR</th><th class="num">Available</th><th>PR Code</th></tr></thead><tbody>';
     sorted.forEach(r=>{
       const rc=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?mpN(r.req[i]):'')+'</td>').join('');
       const sc=[0,1,2].map(i=>'<td class="num '+mpShortCls(r.short?r.short[i]:null)+'">'+(r.short&&r.short[i]!=null?mpN(r.short[i]):'')+'</td>').join('');
+      const e=mpEtaFor(etaStore,r);
+      const etaCells=[0,1,2].map(i=>'<td class="eta-cell"><input type="date" class="eta-date" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+esc(e.eta[i]||'')+'"></td>'+
+        '<td class="eta-cell num"><input type="number" step="any" min="0" class="eta-qty" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+(e.qty[i]!=null?esc(e.qty[i]):'')+'" placeholder="qty"></td>').join('');
       html+='<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,52)+'</td><td>'+esc(r.uom)+'</td>'+
-        rc+sc+
+        rc+sc+etaCells+
         '<td class="num '+mpCovCls(r.covDays)+'">'+(r.covDays!=null?mpN(r.covDays):'—')+'</td><td class="muted small">'+esc(r.covDate||'—')+'</td>'+
         '<td class="num">'+(r.total3m!=null?mpN(r.total3m):'')+'</td><td class="num">'+(r.whStock!=null?mpN(r.whStock):'')+'</td>'+
         '<td class="num">'+(r.inTransit!=null?mpN(r.inTransit):'')+'</td><td class="num">'+(r.openPR!=null?mpN(r.openPR):'')+'</td>'+
@@ -878,6 +901,8 @@ function renderMaterialPlanning(){
     });
     html+='</tbody></table>';
     wrap.innerHTML=html;
+    const etaHandler=e=>{const inp=e.target;if(!inp||!inp.dataset||!inp.dataset.etaKey)return;const idx=parseInt(inp.dataset.etaIdx,10)||0;mpEtaSave(inp.dataset.etaKey,inp.classList.contains('eta-date')?'eta':'qty',idx,inp.value);};
+    wrap.oninput=etaHandler; wrap.onchange=etaHandler;
     MPLAN.last=sorted;
   }catch(err){ wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render material planning: '+esc(err.message||err)+'</div>'; }
 }
@@ -890,11 +915,13 @@ function initMaterialPlanning(){
 }
 function exportMaterialPlanning(){
   const rows=MPLAN.last||mpFiltered(); if(!rows.length){alert('Nothing to export.');return;}
-  const head=['SBU','ItemCode','ItemName','Source','UOM','NovReq','DecReq','JanReq','NovShort','DecShort','JanShort','CoverageDays','CoverageDate','Total3M','WarehouseStock','InTransit','OpenPR','AvailableStock','PRCode'];
+  const head=['SBU','ItemCode','ItemName','Source','UOM','NovReq','DecReq','JanReq','NovShort','DecShort','JanShort','ETA1','ETAQty1','ETA2','ETAQty2','ETA3','ETAQty3','CoverageDays','CoverageDate','Total3M','WarehouseStock','InTransit','OpenPR','AvailableStock','PRCode'];
   const lines=[head.join(',')];
-  rows.forEach(r=>{lines.push([r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"',r.source||'',r.uom||'',
+  const etaStore=mpEtaAll();
+  rows.forEach(r=>{const e=mpEtaFor(etaStore,r);lines.push([r.sbu,r.code,'"'+String(r.name).replace(/"/g,'""')+'"',r.source||'',r.uom||'',
     (r.req&&r.req[0]!=null?r.req[0]:''),(r.req&&r.req[1]!=null?r.req[1]:''),(r.req&&r.req[2]!=null?r.req[2]:''),
     (r.short&&r.short[0]!=null?r.short[0]:''),(r.short&&r.short[1]!=null?r.short[1]:''),(r.short&&r.short[2]!=null?r.short[2]:''),
+    e.eta[0]||'',e.qty[0]!=null?e.qty[0]:'',e.eta[1]||'',e.qty[1]!=null?e.qty[1]:'',e.eta[2]||'',e.qty[2]!=null?e.qty[2]:'',
     r.covDays!=null?r.covDays:'',r.covDate||'',r.total3m!=null?r.total3m:'',r.whStock!=null?r.whStock:'',r.inTransit!=null?r.inTransit:'',r.openPR!=null?r.openPR:'',r.available!=null?r.available:'',r.prCode||''].join(','));});
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Material_Planning_MRP.csv';document.body.appendChild(a);a.click();a.remove();
 }
@@ -1018,6 +1045,13 @@ function initFilters(){
   const mpQ=document.getElementById('mpSearch'); if(mpQ) mpQ.oninput=e=>{MPLAN.search=e.target.value;renderMaterialPlanning();};
   const mpC=document.getElementById('mpShortOnly'); if(mpC) mpC.onchange=e=>{MPLAN.shortOnly=e.target.checked;renderMaterialPlanning();};
   const mpR=document.getElementById('mpReset'); if(mpR) mpR.onclick=()=>{MPLAN.sbu='';MPLAN.month=0;MPLAN.search='';MPLAN.shortOnly=false;const s=document.getElementById('mpSbu');if(s)s.value='';const mm=document.getElementById('mpMonth');if(mm)mm.value='0';const q=document.getElementById('mpSearch');if(q)q.value='';const c=document.getElementById('mpShortOnly');if(c)c.checked=false;renderMaterialPlanning();};
+  const mpCE=document.getElementById('mpClearEta'); if(mpCE) mpCE.onclick=()=>{
+    const rows=mpFiltered(); if(!rows.length)return;
+    if(!confirm('Clear ETA dates and quantities for the '+rows.length+' item(s) currently shown?'))return;
+    const all=mpEtaAll(); rows.forEach(r=>{delete all[mpEtaKey(r)];});
+    try{ localStorage.setItem(MP_ETA_KEY,JSON.stringify(all)); }catch(e){}
+    renderMaterialPlanning();
+  };
   const mpX=document.getElementById('mpCsv'); if(mpX) mpX.onclick=exportMaterialPlanning;
   document.addEventListener('click',e=>{ if(!e.target.closest || !e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 }
