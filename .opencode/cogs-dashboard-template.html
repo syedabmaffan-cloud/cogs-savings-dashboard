@@ -831,7 +831,7 @@ const MPLAN={sbu:'',month:0,search:'',shortOnly:false,last:null};
 
 /* Shared ETA store (Supabase PostgREST). Leave url/anonKey empty for local-only mode.
    The anon key is public by design; row-level security in Supabase protects the data. */
-const ETA_CFG={url:'',anonKey:'',table:'mp_eta'};
+const ETA_CFG={url:'https://btuwcpkoxawlhrnvpmqq.supabase.co',anonKey:'sb_publishable_0vW2akeXv7OtXHMR19TNOw_9snqI2cQ',table:'mp_eta'};
 const MP_ETA_KEY='cogs_mp_eta_v1';     /* local mirror of the shared values */
 const MP_USER_KEY='cogs_mp_user';      /* display name written to the audit trail */
 const MP_DIRTY=new Set();              /* keys changed here, not yet saved upstream */
