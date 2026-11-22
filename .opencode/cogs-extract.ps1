@@ -21,7 +21,8 @@ param(
   [string]$SheetId = '17WltMox1pa-GxnbxNGfBVIFVeymy8n-4q7B7M03u9e4',
   [string]$BudgetTab = 'Consolidated Budget Rate all SBU',
   [int]$PageSize = 200,
-  [switch]$NoBudget
+  [switch]$NoBudget,
+  [switch]$MrpLiveOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -139,6 +140,259 @@ function ToNum([object]$v) {
   $d = 0.0
   if ([double]::TryParse(($s -replace ',', ''), [Globalization.NumberStyles]::Any, [Globalization.CultureInfo]::InvariantCulture, [ref]$d)) { return $d }
   return $null
+}
+
+function Split-Chunk([object[]]$Arr, [int]$Size) {
+  for ($i = 0; $i -lt $Arr.Count; $i += $Size) {
+    $last = [Math]::Min($i + $Size - 1, $Arr.Count - 1)
+    ,($Arr[$i..$last])
+  }
+}
+
+<#
+  MRP (Live): all inputs come from the iBOS MCP gateway.
+    - requirement for C / C+1 / C+2  : latest active MRP run per BU (pro.tblMRPFromProductionSchedule*), numQty1..3
+    - short till C / C+1 / C+2      : same formula as the existing Material Planning sheet, i.e.
+                                      current stock - cumulative requirement (negative = shortage)
+    - average monthly consumption   : actual Issue For Shop Floor quantities (wms.tblInventoryTransaction*),
+                                      grouped once per BU x item x month, last 24 months, zeros after first issue
+    - current stock today           : live wms.tblItemPlantWarehouse.numCurrentStock summed over warehouses/locations
+    - stock coverage (days)         : current stock / (average monthly consumption / 30); N/A when consumption is zero
+#>
+function Get-MrpLiveData {
+  $empty = [pscustomobject]@{
+    generatedAt = (Get-Date).ToString('s'); source = 'unavailable'; months = @(); sbus = @(); rows = @(); error = ''
+  }
+  try {
+    $today    = Get-Date
+    $todayS   = $today.ToString('yyyy-MM-dd')
+    $winStart = ([datetime]::new($today.Year, $today.Month, 1)).AddMonths(-23).ToString('yyyy-MM-dd')
+    $winEnd   = ([datetime]::new($today.Year, $today.Month, 1)).AddMonths(1).ToString('yyyy-MM-dd')
+
+    # --- 1. current MRP run per business unit (latest dteFromDate still in force) ---
+    Write-Host '[cogs] MRP live: reading current MRP runs from iBOS ...'
+    $hdrRows = Invoke-McpQuery @"
+SELECT intMRPFromProductionHeaderId AS HdrId, intMRPProductionScheduleCode AS Code,
+       intBusinessUnitId AS BU, dteFromDate AS FromDate, dteToDate AS ToDate
+FROM pro.tblMRPFromProductionScheduleHeader WITH (NOLOCK)
+WHERE isActive = 1 AND dteFromDate <= '$todayS' AND dteToDate >= '$todayS'
+ORDER BY intBusinessUnitId, dteFromDate DESC, intMRPFromProductionHeaderId DESC
+"@
+    $sbuMap = @{ 'AEL' = 'Mustard' }
+    $hdr = @{}; $hdrOrder = New-Object System.Collections.Generic.List[int]
+    foreach ($c in $hdrRows) {
+      if ($c.Count -lt 5) { continue }
+      $bu = [int]$c[2]
+      if ($hdr.ContainsKey($bu)) { continue }
+      $code = "$($c[1])"
+      $sbu = if ($code -match '^MRP-([A-Z]+)-') { $Matches[1] } else { "BU$bu" }
+      if ($sbuMap.ContainsKey($sbu)) { $sbu = $sbuMap[$sbu] }
+      $hdr[$bu] = [pscustomobject]@{ id = [int]$c[0]; code = $code; bu = $bu; sbu = $sbu; from = [datetime]::Parse("$($c[3])") }
+      $hdrOrder.Add($bu)
+    }
+    if (-not $hdrOrder.Count) { throw 'No active MRP run found for the current period.' }
+
+    $baseMonth = $hdr[$hdrOrder[0]].from
+    $months = @(0..2 | ForEach-Object { $baseMonth.AddMonths($_).ToString('MMM-yy') })
+    $sbus = @($hdrOrder | ForEach-Object { $hdr[$_].sbu } | Select-Object -Unique)
+
+    # --- 2. requirement rows (one page set per MRP run) ---
+    $mrp = @{}
+    foreach ($bu in $hdrOrder) {
+      $hid = $hdr[$bu].id
+      $offset = 0
+      while ($true) {
+        $rows = Invoke-McpQuery @"
+SELECT intMrpfromProductionScheduleRowId AS RowId, intItemId AS ItemId, strItemCode AS Code,
+       strItemName AS Name, intUoMId AS UomId, numQty1 AS Q1, numQty2 AS Q2, numQty3 AS Q3
+FROM pro.tblMRPFromProductionScheduleRow WITH (NOLOCK)
+WHERE intMrpfromProductionScheduleHeaderId = $hid
+ORDER BY intMrpfromProductionScheduleRowId OFFSET $offset ROWS FETCH NEXT $PageSize ROWS ONLY
+"@
+        if ($rows.Count -eq 0) { break }
+        foreach ($c in $rows) {
+          if ($c.Count -lt 8) { continue }
+          $itemId = [int]$c[1]
+          $rq = @(0..2 | ForEach-Object { $v = ToNum $c[5 + $_]; if ($null -eq $v) { 0.0 } else { [double]$v } })
+          $mrp["$bu|$itemId"] = [pscustomobject]@{ bu = $bu; sbu = $hdr[$bu].sbu; mrpCode = $hdr[$bu].code
+            itemId = $itemId; code = "$($c[2])"; name = "$($c[3])"; uomId = "$($c[4])"; req = $rq }
+        }
+        if ($rows.Count -lt $PageSize) { break }
+        $offset += $PageSize
+      }
+    }
+    Write-Host ("[cogs] MRP live: {0} requirement rows" -f $mrp.Count)
+    if (-not $mrp.Count) { throw 'MRP runs contained no requirement rows.' }
+
+    $ids = @($mrp.Keys | ForEach-Object { [int](($_ -split '\|')[1]) } | Sort-Object -Unique)
+    $chunks = @(Split-Chunk $ids 300)
+
+    # --- 3. item master (description + base UOM fallback) ---
+    $nameMap = @{}; $itemUom = @{}
+    foreach ($chunk in $chunks) {
+      $list = $chunk -join ','
+      $nr = Invoke-McpQuery "SELECT intItemId, strItemName, strBaseUomName FROM itm.tblItem WITH (NOLOCK) WHERE intItemId IN ($list)"
+      foreach ($n in $nr) {
+        if ($n.Count -lt 2) { continue }
+        $nameMap[[int]$n[0]] = "$($n[1])"
+        if ($n.Count -ge 3 -and $null -ne $n[2] -and "$($n[2])".Trim() -ne '') { $itemUom[[int]$n[0]] = "$($n[2])".Trim() }
+      }
+    }
+
+    # MRP requirement rows carry intUoMId. Resolve it to the UOM text actually used by
+    # the MRP run/stock transactions so every displayed quantity is in one consistent UOM.
+    $uomIds = @($mrp.Values | ForEach-Object { "$($_.uomId)" } | Where-Object { $_ -ne '' } | Sort-Object -Unique)
+    $mrpUom = @{}
+    foreach ($chunk in $chunks) {
+      $list = $chunk -join ','
+      $uomList = $uomIds -join ','
+      $ur = Invoke-McpQuery "SELECT intItemId, intConvertedUOM, strConvertedUomName FROM itm.tblItemUOMConversion WITH (NOLOCK) WHERE isActive = 1 AND intItemId IN ($list) AND intConvertedUOM IN ($uomList)"
+      foreach ($u in $ur) {
+        if ($u.Count -lt 3) { continue }
+        $un = (("$($u[2])" -replace '[\r\n]+', ' ').Trim())
+        if ($un -ne '') { $mrpUom["$([int]$u[0])|$([int]$u[1])"] = $un }
+      }
+    }
+
+    # --- 4. current stock (live, across warehouses; negatives preserved) ---
+    $stock = @{}
+    foreach ($chunk in $chunks) {
+      $list = $chunk -join ','
+      $sr = Invoke-McpQuery @"
+SELECT intBusinessUnitId AS BU, intItemId AS ItemId, SUM(numCurrentStock) AS Stock,
+       MAX(strBaseUOM) AS Uom, MAX(dteLastActionDateTime) AS Last
+FROM wms.tblItemPlantWarehouse WITH (NOLOCK)
+WHERE isActive = 1 AND intBusinessUnitId IN ($BuList) AND intItemId IN ($list)
+GROUP BY intBusinessUnitId, intItemId
+"@
+      foreach ($s in $sr) {
+        if ($s.Count -lt 3) { continue }
+        $v = ToNum $s[2]; if ($null -eq $v) { $v = 0.0 }
+        $stock["$([int]$s[0])|$([int]$s[1])"] = @{ v = [double]$v; uom = "$($s[3])"; last = "$($s[4])" }
+      }
+    }
+
+    # --- 5. actual consumption: grouped once per BU x item x month (no double counting) ---
+    $cons = @{}; $consUom = @{}
+    foreach ($chunk in $chunks) {
+      $list = $chunk -join ','
+      $base = @"
+SELECT h.intBusinessUnitId AS BU, r.intItemId AS ItemId, CONVERT(char(7), h.dteTransactionDate, 120) AS Pd,
+       CAST(SUM(ABS(CAST(r.numTransactionQuantity AS decimal(28,4)))) AS decimal(28,2)) AS Qty,
+       MAX(r.strUoMName) AS Uom
+FROM wms.tblInventoryTransactionHeader h WITH (NOLOCK)
+JOIN wms.tblInventoryTransactionRow r WITH (NOLOCK) ON r.intInventoryTransactionId = h.intInventoryTransactionId
+WHERE h.intBusinessUnitId IN ($BuList) AND h.isActive = 1 AND r.isActive = 1
+  AND h.TransactionGroupName = 'Issue Inventory' AND h.strTransactionTypeName LIKE 'Issue%Shop%'
+  AND h.dteTransactionDate >= '$winStart' AND h.dteTransactionDate < '$winEnd'
+  AND r.intItemId IN ($list)
+GROUP BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate, 120)
+"@
+      $offset = 0
+      while ($true) {
+        $sql = "$base ORDER BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate, 120) OFFSET $offset ROWS FETCH NEXT $PageSize ROWS ONLY"
+        $cr = Invoke-McpQuery $sql
+        if ($cr.Count -eq 0) { break }
+        foreach ($x in $cr) {
+          if ($x.Count -lt 4) { continue }
+          $k = "$([int]$x[0])|$([int]$x[1])"
+          $q = ToNum $x[3]; if ($null -eq $q) { $q = 0.0 }
+          $pd = "$($x[2])".Trim()
+          if ($pd -notmatch '^\d{4}-\d{2}$') {
+            Write-Host ("[cogs] MRP live bad period key='{0}' cells={1}" -f $pd, ($x -join '|'))
+            continue
+          }
+          if (-not $cons.ContainsKey($k)) { $cons[$k] = @{} }
+          $cons[$k][$pd] = [double]$q
+          if ($x.Count -ge 5 -and "$($x[4])" -ne '') { $consUom[$k] = "$($x[4])" }
+        }
+        if ($cr.Count -lt $PageSize) { break }
+        $offset += $PageSize
+      }
+    }
+
+    $maxPd = ''
+    foreach ($k in $cons.Keys) { foreach ($p in $cons[$k].Keys) { $pp = "$p".Trim(); if ($pp -gt $maxPd) { $maxPd = $pp } } }
+    if (-not $maxPd) { $maxPd = ([datetime]::new($today.Year, $today.Month, 1)).ToString('yyyy-MM') }
+    $anchorDt = [datetime]::ParseExact($maxPd.Trim(), 'yyyy-MM', [Globalization.CultureInfo]::InvariantCulture)
+    $windowStart = $anchorDt.AddMonths(-23)
+
+    # --- 6. assemble rows; short uses the established sheet formula: stock - cumulative requirement ---
+    $out = New-Object System.Collections.Generic.List[object]
+    $uomMismatch = 0
+    foreach ($k in $mrp.Keys) {
+      $m = $mrp[$k]
+      $st = if ($stock.ContainsKey($k)) { $stock[$k] } else { @{ v = 0.0; uom = ''; last = '' } }
+      $stockV = [double]$st.v
+      $cum = 0.0; $short = @()
+      foreach ($q in $m.req) { $cum += [double]$q; $short += [Math]::Round(($stockV - $cum), 4) }
+
+      $avg = $null; $daily = $null; $cover = $null; $nMonths = 0; $consFrom = ''
+      if ($cons.ContainsKey($k) -and $cons[$k].Count -gt 0) {
+        $first = "$((@($cons[$k].Keys | Sort-Object))[0])".Trim()
+        $consFrom = $first
+        try { $fd = [datetime]::ParseExact($first, 'yyyy-MM', [Globalization.CultureInfo]::InvariantCulture) }
+        catch { Write-Host ("[cogs] MRP live skipped bad first='{0}' key='{1}'" -f $first, $k); continue }
+        if ($fd -lt $windowStart) { $fd = $windowStart }
+        $sum = 0.0
+        for ($d = $fd; $d -le $anchorDt; $d = $d.AddMonths(1)) {
+          $pm = '{0:yyyy-MM}' -f $d
+          $q = 0.0
+          if ($cons[$k].ContainsKey($pm)) { $q = [double]$cons[$k][$pm] }
+          $sum += $q; $nMonths++
+        }
+        if ($nMonths -gt 0) {
+          $avg = [Math]::Round(($sum / $nMonths), 4)
+          $daily = [Math]::Round(($avg / 30.0), 6)
+          if ($daily -ne 0) { $cover = [Math]::Round(($stockV / $daily), 2) }
+        }
+      }
+
+      $uom = ''
+      if ($mrpUom.ContainsKey("$($m.itemId)|$($m.uomId)")) { $uom = $mrpUom["$($m.itemId)|$($m.uomId)"] }
+      elseif ("$($st.uom)" -ne '') { $uom = "$($st.uom)" }
+      elseif ($consUom.ContainsKey($k)) { $uom = $consUom[$k] }
+      elseif ($itemUom.ContainsKey($m.itemId)) { $uom = $itemUom[$m.itemId] }
+      if ($uom -and $consUom.ContainsKey($k) -and $consUom[$k] -ne $uom) {
+        $uomMismatch++
+        Write-Host ("[cogs] MRP live UOM mismatch {0} {1}: display='{2}' tx='{3}'" -f $m.sbu, $m.code, $uom, $consUom[$k])
+      }
+      $name = if ($nameMap.ContainsKey($m.itemId)) { $nameMap[$m.itemId] } else { $m.name }
+
+      $out.Add([pscustomobject]@{
+        sbu = $m.sbu; code = $m.code; name = $name; uom = $uom; mrpCode = $m.mrpCode
+        req = @($m.req); short = @($short)
+        avgCons = $avg; dailyCons = $daily; stock = $stockV; coverage = $cover
+        consMonths = $nMonths; consFrom = $consFrom; consTo = $maxPd
+        stockAsOf = "$($st.last)"
+      })
+    }
+
+    $sorted = @($out | Sort-Object sbu, code)
+    Write-Host ("[cogs] MRP live: {0} rows, consumption through {1}, UOM warnings {2}" -f $sorted.Count, $maxPd, $uomMismatch)
+    return [pscustomobject]@{
+      generatedAt = (Get-Date).ToString('s')
+      source = 'iBOSDDD MCP - MRP runs ' + ((@($hdrOrder | ForEach-Object { $hdr[$_].code })) -join ', ') +
+               ' | issue-to-shop-floor actuals | live item stock'
+      months = $months; sbus = $sbus; rows = $sorted; uomWarnings = $uomMismatch; error = ''
+    }
+  } catch {
+    Write-Host ("[cogs] MRP live skipped: " + $_.Exception.Message)
+    $empty.error = $_.Exception.Message
+    return $empty
+  }
+}
+
+if ($MrpLiveOnly) {
+  $mrpLive = Get-MrpLiveData
+  $basePath = Join-Path $ProjectRoot 'docs\data.json'
+  if (-not (Test-Path -LiteralPath $basePath)) { throw "MrpLiveOnly needs an existing dataset at $basePath" }
+  $data = Get-Content -LiteralPath $basePath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $data | Add-Member -Force -NotePropertyName mrpLive -NotePropertyValue $mrpLive
+  $json = $data | ConvertTo-Json -Depth 12 -Compress
+  [IO.File]::WriteAllText($OutJson, $json, (New-Object Text.UTF8Encoding($false)))
+  Write-Host ("[cogs] wrote {0} ({1:N1} KB) - MRP Live only, other sections preserved" -f $OutJson, ((Get-Item $OutJson).Length / 1KB))
+  return
 }
 
 function Get-GoogleToken {
@@ -402,6 +656,9 @@ try {
   Write-Host ("[cogs] material planning skipped: " + $_.Exception.Message)
 }
 
+# ================================================================ 2e. MRP (LIVE)
+$mrpLive = Get-MrpLiveData
+
 # ================================================================ 3. WRITE
 $data = [pscustomobject]@{
   generatedAt = (Get-Date).ToString('s')
@@ -413,6 +670,7 @@ $data = [pscustomobject]@{
   budgetCogs  = $budgetCogs
   sales       = $salesList
   materialPlanning = $materialPlan
+  mrpLive     = $mrpLive
 }
 $json = $data | ConvertTo-Json -Depth 12 -Compress
 [IO.File]::WriteAllText($OutJson, $json, (New-Object Text.UTF8Encoding($false)))

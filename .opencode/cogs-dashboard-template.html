@@ -128,6 +128,7 @@
     <div class="tab" data-tab="monthly">Material Rate Analysis</div>
     <div class="tab" data-tab="pareto">Material COGS Pareto</div>
     <div class="tab" data-tab="materialplan">Material Planning</div>
+    <div class="tab" data-tab="mrplive">MRP (Live)</div>
   </div>
 </header>
 
@@ -267,6 +268,29 @@
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Material plan <span class="sub" id="mpCount"></span></h3></div>
       <div id="mpTable" class="tblwrap" style="max-height:560px"></div>
+    </div>
+  </section>
+
+  <section id="tab-mrplive" class="hidden">
+    <div class="card">
+      <div class="flexhead">
+        <h3 style="margin:0">MRP (Live) <span class="sub">iBOS MRP runs · actual consumption · current stock</span></h3>
+        <div class="fld-row">
+          <div class="fld"><label>SBU</label><select id="mlSbu"></select></div>
+          <div class="fld"><label>Search</label><input type="text" id="mlSearch" placeholder="code or name" /></div>
+          <div class="fld"><label>&nbsp;</label><label class="small" style="display:flex;gap:6px;align-items:center;height:30px"><input type="checkbox" id="mlShortOnly" /> Shortages only</label></div>
+          <button id="mlReset">Reset</button>
+          <button id="mlRefresh">Refresh MRP</button>
+          <button id="mlCsv" class="primary">Export CSV</button>
+        </div>
+      </div>
+      <div class="note small" id="mlNote">Loading live MRP data…</div>
+      <div id="mlSummary" class="mrat-sum"></div>
+      <div class="note small">Requirements (C, C+1, C+2) come from the current iBOS MRP run. Shortages use the same rule as Material Planning: <b>current stock minus cumulative requirement</b> (negative = shortage). Average monthly consumption = actual Issue For Shop Floor quantity over the months available in the last 24 months, from the first recorded issue onward, including zero months after that; daily consumption = average / 30. Current stock is the live iBOS item-warehouse balance (negative balances are kept). Coverage = stock / daily consumption; shown as N/A when there is no consumption history or daily consumption is zero. Quantities and UOM follow the MRP run's UOM (with live stock/consumption UOM as fallback), so all columns are consistent.</div>
+    </div>
+    <div class="card">
+      <div class="flexhead"><h3 style="margin:0">Live material plan <span class="sub" id="mlCount"></span></h3></div>
+      <div id="mlTable" class="tblwrap" style="max-height:600px"></div>
     </div>
   </section>
 </main>
@@ -1050,6 +1074,98 @@ function exportMaterialPlanning(){
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Material_Planning_MRP.csv';document.body.appendChild(a);a.click();a.remove();
 }
 
+/* ============================ MRP (Live) ============================ */
+const MRPL={sbu:'',search:'',shortOnly:false,last:null,busy:false};
+function mlMeta(){return (DATA&&DATA.mrpLive)?DATA.mrpLive:{months:['Nov-26','Dec-26','Jan-27'],sbus:[],rows:[],generatedAt:'',source:'',error:''};}
+function mlNa(v){return (v==null||isNaN(v))?'N/A':fQ(v);}
+function mlFiltered(){
+  const md=mlMeta();const q=(MRPL.search||'').toUpperCase();
+  return (md.rows||[]).filter(r=>{
+    if(MRPL.sbu&&r.sbu!==MRPL.sbu)return false;
+    if(q&&!((String(r.code||'')+' '+String(r.name||'')).toUpperCase().includes(q)))return false;
+    if(MRPL.shortOnly&&!(r.short&&r.short[0]!=null&&r.short[0]<0))return false;
+    return true;
+  });
+}
+function renderMrpLive(){
+  const md=mlMeta();const wrap=document.getElementById('mlTable');if(!wrap)return;
+  try{
+    const rows=mlFiltered();
+    const short0=rows.filter(r=>r.short&&r.short[0]!=null&&r.short[0]<0).length;
+    const cov30=rows.filter(r=>r.coverage!=null&&r.coverage<30).length;
+    const noCons=rows.filter(r=>r.avgCons==null).length;
+    const negStock=rows.filter(r=>r.stock!=null&&r.stock<0).length;
+    const sum=document.getElementById('mlSummary');
+    if(sum){
+      sum.innerHTML='<div class="m"><div class="l">Items in live MRP</div><div class="v">'+rows.length+'</div><div class="s">'+(MRPL.sbu||'All SBU')+'</div></div>'+
+        '<div class="m"><div class="l">Short till C</div><div class="v neg">'+short0+'</div><div class="s">negative stock position</div></div>'+
+        '<div class="m"><div class="l">Coverage &lt; 30 days</div><div class="v neg">'+cov30+'</div><div class="s">based on actual consumption</div></div>'+
+        '<div class="m"><div class="l">No consumption history</div><div class="v">'+noCons+'</div><div class="s">'+negStock+' with negative stock</div></div>';
+    }
+    const note=document.getElementById('mlNote');
+    if(note){
+      const src=md.source||'iBOS MCP';
+      note.innerHTML='Source: '+esc(src)+' · generated '+esc(String(md.generatedAt||'').replace('T',' '))+
+        ' · consumption through '+esc(md.consTo||md.rows&&md.rows[0]&&md.rows[0].consTo||'—')+
+        (md.error?' · <span class="neg">'+esc(md.error)+'</span>':'');
+    }
+    const cnt=document.getElementById('mlCount');if(cnt)cnt.textContent='('+rows.length+' items · '+(md.months||[]).join(' / ')+')';
+    const sorted=[...rows].sort((a,b)=>{
+      const ac=(a.coverage==null||isNaN(a.coverage))?1e15:a.coverage;
+      const bc=(b.coverage==null||isNaN(b.coverage))?1e15:b.coverage;
+      if(ac!==bc)return ac-bc;
+      const as=(a.short&&a.short[0]!=null)?a.short[0]:1e15;
+      const bs=(b.short&&b.short[0]!=null)?b.short[0]:1e15;
+      if(as!==bs)return as-bs;
+      return String(a.code||'').localeCompare(String(b.code||''));
+    });
+    let html='<table><thead><tr><th>Item Code</th><th>Material Description</th><th>UOM</th>'+
+      '<th class="num">Current Month Requirement</th><th class="num">C+1 Requirement</th><th class="num">C+2 Requirement</th>'+
+      '<th class="num">Short Till C</th><th class="num">Short Till C+1</th><th class="num">Short Till C+2</th>'+
+      '<th class="num">Average Monthly Consumption</th><th class="num">Daily Consumption</th>'+
+      '<th class="num">Current Stock Today</th><th class="num">Stock Coverage (Days)</th></tr></thead><tbody>';
+    sorted.forEach(r=>{
+      const rq=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?fQ(r.req[i]):'')+'</td>').join('');
+      const sh=[0,1,2].map(i=>'<td class="num '+((r.short&&r.short[i]!=null&&r.short[i]<0)?'neg':'')+'">'+(r.short&&r.short[i]!=null?fQ(r.short[i]):'')+'</td>').join('');
+      const cov=mlNa(r.coverage);const covCls=r.coverage==null?'neu':(r.coverage<7?'neg':(r.coverage<30?'neu':'pos'));
+      html+='<tr><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,60)+'</td><td>'+esc(r.uom||'—')+'</td>'+
+        rq+sh+
+        '<td class="num">'+mlNa(r.avgCons)+'</td><td class="num">'+mlNa(r.dailyCons)+'</td>'+
+        '<td class="num '+((r.stock!=null&&r.stock<0)?'neg':'')+'">'+(r.stock!=null?fQ(r.stock):'N/A')+'</td>'+
+        '<td class="num '+covCls+'">'+cov+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
+    MRPL.last=sorted;
+  }catch(err){wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render live MRP: '+esc(err.message||err)+'</div>';}
+}
+function initMrpLive(){
+  const md=mlMeta();const sel=document.getElementById('mlSbu');
+  if(sel){
+    const opts=md.sbus||[];
+    if(MRPL.sbu&&!opts.includes(MRPL.sbu))MRPL.sbu='';
+    sel.innerHTML='<option value="">All SBU</option>'+opts.map(s=>'<option>'+esc(s)+'</option>').join('');
+    sel.value=MRPL.sbu;
+  }
+  const q=document.getElementById('mlSearch');if(q)q.value=MRPL.search;
+  const c=document.getElementById('mlShortOnly');if(c)c.checked=MRPL.shortOnly;
+}
+function exportMrpLive(){
+  const rows=MRPL.last||mlFiltered();if(!rows.length){alert('Nothing to export.');return;}
+  const head=['SBU','ItemCode','MaterialDescription','UOM','CurrentMonthRequirement','C+1Requirement','C+2Requirement','ShortTillC','ShortTillC+1','ShortTillC+2','AverageMonthlyConsumption','DailyConsumption','CurrentStockToday','StockCoverageDays'];
+  const lines=[head.join(',')];
+  rows.forEach(r=>{
+    const v=x=>(x==null||isNaN(x))?'':x;
+    lines.push([r.sbu,r.code,'"'+String(r.name||'').replace(/"/g,'""')+'"',r.uom||'',
+      v(r.req&&r.req[0]),v(r.req&&r.req[1]),v(r.req&&r.req[2]),
+      v(r.short&&r.short[0]),v(r.short&&r.short[1]),v(r.short&&r.short[2]),
+      v(r.avgCons),v(r.dailyCons),v(r.stock),v(r.coverage)].join(','));
+  });
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='MRP_Live.csv';document.body.appendChild(a);a.click();a.remove();
+}
+
 /* ============================ monthly exports ============================ */
 function exportMonthlyChart(){
   const cv=document.getElementById('cvMr'); if(!cv||typeof cv.toDataURL!=='function')return;
@@ -1185,6 +1301,12 @@ function initFilters(){
     renderMaterialPlanning();
   };
   const mpX=document.getElementById('mpCsv'); if(mpX) mpX.onclick=exportMaterialPlanning;
+  const mlS=document.getElementById('mlSbu'); if(mlS) mlS.onchange=e=>{MRPL.sbu=e.target.value;renderMrpLive();};
+  const mlQ=document.getElementById('mlSearch'); if(mlQ) mlQ.oninput=e=>{MRPL.search=e.target.value;renderMrpLive();};
+  const mlC=document.getElementById('mlShortOnly'); if(mlC) mlC.onchange=e=>{MRPL.shortOnly=e.target.checked;renderMrpLive();};
+  const mlR=document.getElementById('mlReset'); if(mlR) mlR.onclick=()=>{MRPL.sbu='';MRPL.search='';MRPL.shortOnly=false;initMrpLive();renderMrpLive();};
+  const mlF=document.getElementById('mlRefresh'); if(mlF) mlF.onclick=()=>fetchData(false);
+  const mlX=document.getElementById('mlCsv'); if(mlX) mlX.onclick=exportMrpLive;
   document.addEventListener('click',e=>{ if(!e.target.closest || !e.target.closest('.ms')) document.querySelectorAll('.ms.open').forEach(m=>m.classList.remove('open')); });
 }
 function exportCsv(){
@@ -1206,6 +1328,7 @@ function renderAll(){
   const msec=document.getElementById('tab-monthly'); if(msec && !msec.classList.contains('hidden')) renderMonthly();
   const psec=document.getElementById('tab-pareto'); if(psec && !psec.classList.contains('hidden')) renderPareto();
   const mpsec=document.getElementById('tab-materialplan'); if(mpsec && !mpsec.classList.contains('hidden')) renderMaterialPlanning();
+  const mlsec=document.getElementById('tab-mrplive'); if(mlsec && !mlsec.classList.contains('hidden')) renderMrpLive();
   document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
   const warn=document.getElementById('warnBox'); const msgs=[];
   const genTs=META.generatedAt?new Date(META.generatedAt):null;
@@ -1225,16 +1348,16 @@ function fetchData(silent){
   setStatus('refreshing…');
   return fetch(bust,{cache:'no-store'})
     .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(d=>{ setData(d); syncState(); MRAT.leFrom=ASOF; buildFilterOptions(); initMaterialPlanning(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
+    .then(d=>{ setData(d); syncState(); MRAT.leFrom=ASOF; buildFilterOptions(); initMaterialPlanning(); initMrpLive(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
     .catch(e=>{ setStatus(''); if(!silent) alert('Could not load data.json: '+e.message+'\n(this is normal when opened as a local file - showing the embedded snapshot).'); });
 }
 document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active',x===t));
-  ['exec','sbu','item','dq','monthly','pareto','materialplan'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
+  ['exec','sbu','item','dq','monthly','pareto','materialplan','mrplive'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
   renderAll();
 });
 let _rz=null; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>renderAll(),200);});
-window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,MPLAN:MPLAN,renderMonthly:renderMonthly,renderPareto:renderPareto,renderMaterialPlanning:renderMaterialPlanning,leCompute:leCompute,monthsBetween:monthsBetween};
+window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,MPLAN:MPLAN,MRPL:MRPL,renderMonthly:renderMonthly,renderPareto:renderPareto,renderMaterialPlanning:renderMaterialPlanning,renderMrpLive:renderMrpLive,leCompute:leCompute,monthsBetween:monthsBetween};
 
 /* boot: show the embedded snapshot immediately, then try to load live data.json */
 setData(window.COGS || {sbus:[],items:[],budget:[]});
@@ -1242,6 +1365,7 @@ syncState();
 initFilters();
 buildFilterOptions();
 initMaterialPlanning();
+initMrpLive();
 initMonthlyControls();
 refreshMonths();
 renderAll();

@@ -62,6 +62,27 @@ Notes:
 - The page refreshes ETAs every 90 seconds (when idle on the tab) and has a **Refresh ETA** button.
 - If the shared store is unreachable, edits are kept locally and retried automatically.
 
+## MRP (Live)
+
+The **MRP (Live)** tab sits next to Material Planning and is generated entirely from the iBOS MCP gateway;
+it does not change the Google Sheet–sourced Material Planning tab or the shared ETA register.
+
+- **Requirements (C, C+1, C+2):** latest active MRP run per business unit (`pro.tblMRPFromProductionScheduleHeader/Row`), `numQty1..3`.
+- **Short till C / C+1 / C+2:** `current stock − cumulative requirement` — the same rule used by Material Planning (negative = shortage).
+- **Actual consumption:** `Issue Inventory → Issue For Shop Floor` lines from `wms.tblInventoryTransaction*`, grouped once per BU × item × month, last 24 months. The window starts at the first recorded issue for that item and includes zero-consumption months after it; no BOM, planned procurement or month-end balances are used.
+- **Average monthly consumption:** total actual consumption ÷ number of months in that historical window; **daily consumption** = average ÷ 30.
+- **Current stock today:** live `wms.tblItemPlantWarehouse.numCurrentStock`, summed over warehouses and locations; negative balances remain visible.
+- **Stock coverage (days):** current stock ÷ daily consumption; shown as **N/A** when there is no consumption history or daily consumption is zero.
+- **UOM:** resolved from the MRP row's `intUoMId` (via `itm.tblItemUOMConversion`), with live stock/consumption UOM as fallback, so all displayed quantities use one consistent UOM.
+
+The dataset is in `data.mrpLive` and is refreshed by the same scheduled/manual extraction as the rest of the dashboard.
+To regenerate only this section without touching the other dataset sections:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .opencode\cogs-extract.ps1 -MrpLiveOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File .opencode\cogs-build.ps1
+```
+
 ## Files
 
 | Path | Purpose |
@@ -69,7 +90,7 @@ Notes:
 | `docs/index.html` | The dashboard (GitHub Pages entry point) |
 | `docs/data.json` | Refreshable dataset the page loads |
 | `COGS_Savings_Dashboard.html` | Same page as one offline-capable file (embedded snapshot) |
-| `.opencode/cogs-extract.ps1` | Reads actuals from the iBOS MCP server (read-only, paginated) + budget from the Google Sheet |
+| `.opencode/cogs-extract.ps1` | Reads actuals and MRP Live inputs from the iBOS MCP server (read-only, paginated) + budget from the Google Sheet; `-MrpLiveOnly` refreshes just the live MRP dataset |
 | `.opencode/cogs-build.ps1` | Writes `docs/data.json` + `docs/index.html` |
 | `.opencode/cogs-dashboard-template.html` | Dashboard template |
 | `.opencode/supabase-eta.sql` | Schema for the shared Material Planning ETA register (run once in Supabase) |
