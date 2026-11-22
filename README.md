@@ -71,9 +71,9 @@ it does not change the Google Sheet–sourced Material Planning tab or the share
 - **Short till C / C+1 / C+2:** `current stock − cumulative requirement` — the same rule used by Material Planning (negative = shortage).
 - **Actual consumption:** `Issue Inventory → Issue For Shop Floor` lines from `wms.tblInventoryTransaction*`, grouped once per BU × item × month, last 24 months. The window starts at the first recorded issue for that item and includes zero-consumption months after it; no BOM, planned procurement or month-end balances are used.
 - **Average monthly consumption:** total actual consumption ÷ number of months in that historical window; **daily consumption** = average ÷ 30.
-- **Current stock today:** live `wms.tblItemPlantWarehouse.numCurrentStock`, summed over warehouses and locations; negative balances remain visible.
+- **Current stock today:** reconstructed from the inventory ledger — the sum of every active `wms.tblInventoryTransactionRow.numTransactionQuantity` movement for the BU × item (receipts positive, issues negative, transfers and inventory adjustments signed). This is used because `wms.tblItemPlantWarehouse.numCurrentStock` is a cached balance that stops updating for many BUs; an item with no ledger rows falls back to the MRP snapshot's `numStockQty`. Negative balances remain visible.
 - **Stock coverage (days):** current stock ÷ daily consumption; shown as **N/A** when there is no consumption history or daily consumption is zero.
-- **UOM:** resolved from the MRP row's `intUoMId` (via `itm.tblItemUOMConversion`), with live stock/consumption UOM as fallback, so all displayed quantities use one consistent UOM.
+- **UOM:** resolved from the MRP row's `intUoMId` (via `itm.tblItemUOMConversion`), with consumption/item-master UOM as fallback, so all displayed quantities use one consistent UOM.
 
 The dataset is in `data.mrpLive` and is refreshed by the same scheduled/manual extraction as the rest of the dashboard.
 To regenerate only this section without touching the other dataset sections:

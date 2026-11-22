@@ -286,7 +286,7 @@
       </div>
       <div class="note small" id="mlNote">Loading live MRP data…</div>
       <div id="mlSummary" class="mrat-sum"></div>
-      <div class="note small">Requirements (C, C+1, C+2) come from the current iBOS MRP run. Shortages use the same rule as Material Planning: <b>current stock minus cumulative requirement</b> (negative = shortage). Average monthly consumption = actual Issue For Shop Floor quantity over the months available in the last 24 months, from the first recorded issue onward, including zero months after that; daily consumption = average / 30. Current stock is the live iBOS item-warehouse balance (negative balances are kept). Coverage = stock / daily consumption; shown as N/A when there is no consumption history or daily consumption is zero. Quantities and UOM follow the MRP run's UOM (with live stock/consumption UOM as fallback), so all columns are consistent.</div>
+      <div class="note small">Requirements (C, C+1, C+2) come from the current iBOS MRP run. Shortages use the same rule as Material Planning: <b>current stock minus cumulative requirement</b> (negative = shortage). Average monthly consumption = actual Issue For Shop Floor quantity over the months available in the last 24 months, from the first recorded issue onward, including zero months after that; daily consumption = average / 30. Current stock is the iBOS inventory-ledger balance (sum of all active receipts, issues, transfers and inventory adjustments; negative balances are kept). Coverage = stock / daily consumption; shown as N/A when there is no consumption history or daily consumption is zero. Quantities and UOM follow the MRP run's UOM (with consumption/item-master UOM as fallback), so all columns are consistent.</div>
     </div>
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Live material plan <span class="sub" id="mlCount"></span></h3></div>
@@ -1123,7 +1123,7 @@ function renderMrpLive(){
       '<th class="num">Current Month Requirement</th><th class="num">C+1 Requirement</th><th class="num">C+2 Requirement</th>'+
       '<th class="num">Short Till C</th><th class="num">Short Till C+1</th><th class="num">Short Till C+2</th>'+
       '<th class="num">Average Monthly Consumption</th><th class="num">Daily Consumption</th>'+
-      '<th class="num">Current Stock Today</th><th class="num">Stock Coverage (Days)</th></tr></thead><tbody>';
+      '<th class="num" title="Inventory ledger balance: sum of all active receipts, issues, transfers and adjustments">Current Stock Today</th><th class="num">Stock Coverage (Days)</th></tr></thead><tbody>';
     sorted.forEach(r=>{
       const rq=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?fQ(r.req[i]):'')+'</td>').join('');
       const sh=[0,1,2].map(i=>'<td class="num '+((r.short&&r.short[i]!=null&&r.short[i]<0)?'neg':'')+'">'+(r.short&&r.short[i]!=null?fQ(r.short[i]):'')+'</td>').join('');

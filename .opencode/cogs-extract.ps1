@@ -156,7 +156,10 @@ function Split-Chunk([object[]]$Arr, [int]$Size) {
                                       current stock - cumulative requirement (negative = shortage)
     - average monthly consumption   : actual Issue For Shop Floor quantities (wms.tblInventoryTransaction*),
                                       grouped once per BU x item x month, last 24 months, zeros after first issue
-    - current stock today           : live wms.tblItemPlantWarehouse.numCurrentStock summed over warehouses/locations
+    - current stock today           : inventory ledger balance, i.e. SUM(wms.tblInventoryTransactionRow.numTransactionQuantity)
+                                      for every active movement (receive, issue, transfer, adjustment) of the item in the BU.
+                                      wms.tblItemPlantWarehouse.numCurrentStock is a stale cache for many BUs, so it is
+                                      only used as a fallback (via the MRP snapshot) when an item has no ledger rows.
     - stock coverage (days)         : current stock / (average monthly consumption / 30); N/A when consumption is zero
 #>
 function Get-MrpLiveData {
@@ -204,18 +207,20 @@ ORDER BY intBusinessUnitId, dteFromDate DESC, intMRPFromProductionHeaderId DESC
       while ($true) {
         $rows = Invoke-McpQuery @"
 SELECT intMrpfromProductionScheduleRowId AS RowId, intItemId AS ItemId, strItemCode AS Code,
-       strItemName AS Name, intUoMId AS UomId, numQty1 AS Q1, numQty2 AS Q2, numQty3 AS Q3
+       strItemName AS Name, intUoMId AS UomId, numQty1 AS Q1, numQty2 AS Q2, numQty3 AS Q3,
+       numStockQty AS MrpStock
 FROM pro.tblMRPFromProductionScheduleRow WITH (NOLOCK)
 WHERE intMrpfromProductionScheduleHeaderId = $hid
 ORDER BY intMrpfromProductionScheduleRowId OFFSET $offset ROWS FETCH NEXT $PageSize ROWS ONLY
 "@
         if ($rows.Count -eq 0) { break }
         foreach ($c in $rows) {
-          if ($c.Count -lt 8) { continue }
+          if ($c.Count -lt 9) { continue }
           $itemId = [int]$c[1]
           $rq = @(0..2 | ForEach-Object { $v = ToNum $c[5 + $_]; if ($null -eq $v) { 0.0 } else { [double]$v } })
+          $mrpStock = ToNum $c[8]
           $mrp["$bu|$itemId"] = [pscustomobject]@{ bu = $bu; sbu = $hdr[$bu].sbu; mrpCode = $hdr[$bu].code
-            itemId = $itemId; code = "$($c[2])"; name = "$($c[3])"; uomId = "$($c[4])"; req = $rq }
+            itemId = $itemId; code = "$($c[2])"; name = "$($c[3])"; uomId = "$($c[4])"; req = $rq; mrpStock = $mrpStock }
         }
         if ($rows.Count -lt $PageSize) { break }
         $offset += $PageSize
@@ -254,21 +259,34 @@ ORDER BY intMrpfromProductionScheduleRowId OFFSET $offset ROWS FETCH NEXT $PageS
       }
     }
 
-    # --- 4. current stock (live, across warehouses; negatives preserved) ---
+    # --- 4. current stock today: inventory ledger balance (all warehouses; negatives preserved) ---
+    # wms.tblItemPlantWarehouse.numCurrentStock is a cached balance that stops updating for many
+    # BUs (last action Sep/Oct 2026), so stock is rebuilt from every active ledger movement:
+    # receipts +, issues -, transfers +/- and inventory adjustments.
     $stock = @{}
     foreach ($chunk in $chunks) {
       $list = $chunk -join ','
-      $sr = Invoke-McpQuery @"
-SELECT intBusinessUnitId AS BU, intItemId AS ItemId, SUM(numCurrentStock) AS Stock,
-       MAX(strBaseUOM) AS Uom, MAX(dteLastActionDateTime) AS Last
-FROM wms.tblItemPlantWarehouse WITH (NOLOCK)
-WHERE isActive = 1 AND intBusinessUnitId IN ($BuList) AND intItemId IN ($list)
-GROUP BY intBusinessUnitId, intItemId
+      $base = @"
+SELECT h.intBusinessUnitId AS BU, r.intItemId AS ItemId, SUM(r.numTransactionQuantity) AS Stock,
+       MAX(h.dteTransactionDate) AS Last
+FROM wms.tblInventoryTransactionHeader h WITH (NOLOCK)
+JOIN wms.tblInventoryTransactionRow r WITH (NOLOCK) ON r.intInventoryTransactionId = h.intInventoryTransactionId
+WHERE h.intBusinessUnitId IN ($BuList) AND h.isActive = 1 AND r.isActive = 1
+  AND r.intItemId IN ($list)
+GROUP BY h.intBusinessUnitId, r.intItemId
 "@
-      foreach ($s in $sr) {
-        if ($s.Count -lt 3) { continue }
-        $v = ToNum $s[2]; if ($null -eq $v) { $v = 0.0 }
-        $stock["$([int]$s[0])|$([int]$s[1])"] = @{ v = [double]$v; uom = "$($s[3])"; last = "$($s[4])" }
+      $offset = 0
+      while ($true) {
+        $sql = "$base ORDER BY h.intBusinessUnitId, r.intItemId OFFSET $offset ROWS FETCH NEXT $PageSize ROWS ONLY"
+        $sr = Invoke-McpQuery $sql
+        if ($sr.Count -eq 0) { break }
+        foreach ($s in $sr) {
+          if ($s.Count -lt 3) { continue }
+          $v = ToNum $s[2]; if ($null -eq $v) { $v = 0.0 }
+          $stock["$([int]$s[0])|$([int]$s[1])"] = @{ v = [double]$v; last = "$($s[3])" }
+        }
+        if ($sr.Count -lt $PageSize) { break }
+        $offset += $PageSize
       }
     }
 
@@ -322,8 +340,10 @@ GROUP BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate
     $uomMismatch = 0
     foreach ($k in $mrp.Keys) {
       $m = $mrp[$k]
-      $st = if ($stock.ContainsKey($k)) { $stock[$k] } else { @{ v = 0.0; uom = ''; last = '' } }
-      $stockV = [double]$st.v
+      $st = if ($stock.ContainsKey($k)) { $stock[$k] } else { $null }
+      if ($st) { $stockV = [double]$st.v; $stockAsOf = "$($st.last)" }
+      elseif ($null -ne $m.mrpStock) { $stockV = [double]$m.mrpStock; $stockAsOf = 'MRP snapshot' }
+      else { $stockV = 0.0; $stockAsOf = '' }
       $cum = 0.0; $short = @()
       foreach ($q in $m.req) { $cum += [double]$q; $short += [Math]::Round(($stockV - $cum), 4) }
 
@@ -350,7 +370,6 @@ GROUP BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate
 
       $uom = ''
       if ($mrpUom.ContainsKey("$($m.itemId)|$($m.uomId)")) { $uom = $mrpUom["$($m.itemId)|$($m.uomId)"] }
-      elseif ("$($st.uom)" -ne '') { $uom = "$($st.uom)" }
       elseif ($consUom.ContainsKey($k)) { $uom = $consUom[$k] }
       elseif ($itemUom.ContainsKey($m.itemId)) { $uom = $itemUom[$m.itemId] }
       if ($uom -and $consUom.ContainsKey($k) -and $consUom[$k] -ne $uom) {
@@ -364,7 +383,7 @@ GROUP BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate
         req = @($m.req); short = @($short)
         avgCons = $avg; dailyCons = $daily; stock = $stockV; coverage = $cover
         consMonths = $nMonths; consFrom = $consFrom; consTo = $maxPd
-        stockAsOf = "$($st.last)"
+        stockAsOf = $stockAsOf
       })
     }
 
@@ -373,7 +392,7 @@ GROUP BY h.intBusinessUnitId, r.intItemId, CONVERT(char(7), h.dteTransactionDate
     return [pscustomobject]@{
       generatedAt = (Get-Date).ToString('s')
       source = 'iBOSDDD MCP - MRP runs ' + ((@($hdrOrder | ForEach-Object { $hdr[$_].code })) -join ', ') +
-               ' | issue-to-shop-floor actuals | live item stock'
+               ' | issue-to-shop-floor actuals | inventory ledger stock'
       months = $months; sbus = $sbus; rows = $sorted; uomWarnings = $uomMismatch; error = ''
     }
   } catch {
