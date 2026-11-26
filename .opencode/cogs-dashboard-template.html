@@ -6,59 +6,72 @@
 <title>COGS Savings Dashboard</title>
 <style>
   :root{
-    --bg:#0f1420; --panel:#161d2e; --panel2:#1d2639; --line:#2a3550;
-    --txt:#e8edf7; --mut:#93a0bd; --acc:#4f8cff; --pos:#25b06b; --neg:#e5484d; --neu:#8b97b4;
-    --chip:#22304d; --warn:#e0a126;
+    --bg:#f5f7fb; --panel:#ffffff; --panel2:#f8fafc; --line:#e2e8f0; --line2:#eef2f7;
+    --txt:#1e293b; --mut:#5c6a80; --acc:#1d4ed8; --acc2:#2563eb; --acc-soft:#e8efff;
+    --pos:#146c34; --pos-soft:#e7f6ec; --neg:#b42318; --neg-soft:#fdeceb; --neu:#5c6a80; --neu-soft:#f1f5f9;
+    --chip:#eef2f7; --warn:#92400e; --warn-soft:#fff7e6; --warn-line:#f0d9a8;
+    --hover:#f2f7ff; --stripe:#fbfcfe; --top80:#eff6ff;
+    --shadow:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.04);
+    --shadow-lg:0 12px 32px rgba(15,23,42,.16);
+    --chart-blue:#2563eb; --chart-slate:#7c8ba1; --chart-amber:#d97706; --chart-green:#16a34a; --chart-red:#dc2626; --chart-purple:#7c3aed;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
   a{color:var(--acc)}
-  header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#131a2b,#0f1420);border-bottom:1px solid var(--line);padding:12px 18px}
+  header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.04);padding:11px 18px}
   .brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .brand h1{font-size:17px;margin:0;letter-spacing:.2px}
+  .brand h1{font-size:17px;margin:0;letter-spacing:-.2px;color:#0f172a}
   .brand .meta{color:var(--mut);font-size:11.5px}
   .tabs{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  .tab{padding:6px 13px;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--mut);cursor:pointer;font-size:12.5px}
-  .tab.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  .tab{padding:6px 13px;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--mut);cursor:pointer;font-size:12.5px;transition:background .15s,color .15s,border-color .15s}
+  .tab:hover{border-color:#c7d2fe;color:var(--acc);background:var(--acc-soft)}
+  .tab.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:0 1px 2px rgba(29,78,216,.25)}
   main{padding:16px 18px 60px}
-  .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:14px}
+  .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:var(--shadow)}
   .fld{display:flex;flex-direction:column;gap:3px}
-  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
-  select,input[type=text]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px 8px;font-size:12.5px;min-width:120px}
+  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600}
+  select,input[type=text]{background:var(--panel);border:1px solid #cbd5e1;color:var(--txt);border-radius:7px;padding:6px 8px;font-size:12.5px;min-width:120px}
   input[type=text]{min-width:180px}
-  #mpTable input[type=date],#mpTable input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:3px 5px;font-size:11.5px;box-sizing:border-box;color-scheme:dark}
+  select:focus,input[type=text]:focus{outline:2px solid #bfdbfe;outline-offset:0;border-color:var(--acc2)}
+  #mpTable input[type=date],#mpTable input[type=number]{background:var(--panel);border:1px solid #d7dee9;color:var(--txt);border-radius:6px;padding:3px 5px;font-size:11.5px;box-sizing:border-box;color-scheme:light}
   #mpTable input[type=date]{min-width:128px}
   #mpTable input[type=number]{min-width:82px;text-align:right}
   #mpTable input[type=date]:focus,#mpTable input[type=number]:focus{outline:1px solid var(--acc);border-color:var(--acc)}
   #mpTable td.eta-cell{padding:3px 4px}
-  button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12.5px}
-  button:hover{border-color:var(--acc)}
+  button{background:var(--panel);border:1px solid #cbd5e1;color:var(--txt);border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12.5px;transition:background .15s,border-color .15s}
+  button:hover{border-color:var(--acc2);background:var(--acc-soft);color:var(--acc)}
+  button:focus-visible{outline:2px solid #93c5fd;outline-offset:1px}
   button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
-  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-  .seg button{border:0;border-radius:0;background:var(--panel2)}
+  button.primary:hover{background:#1e40af;border-color:#1e40af;color:#fff}
+  .seg{display:flex;border:1px solid #cbd5e1;border-radius:7px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:var(--panel)}
   .seg button.active{background:var(--acc);color:#fff;font-weight:600}
+  .seg button.active:hover{background:#1e40af;color:#fff}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:11px;margin-bottom:16px}
-  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 13px}
-  .kpi .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
-  .kpi .v{font-size:20px;font-weight:700;margin-top:5px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 13px;box-shadow:var(--shadow)}
+  .kpi .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600}
+  .kpi .v{font-size:20px;font-weight:700;margin-top:5px;color:#0f172a}
   .kpi .s{font-size:11px;color:var(--mut);margin-top:3px}
   .pos{color:var(--pos)!important}.neg{color:var(--neg)!important}.neu{color:var(--neu)!important}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid2>*{min-width:0}
   @media(max-width:1150px){.grid2{grid-template-columns:1fr}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 14px;margin-bottom:14px}
-  .card h3{margin:0 0 10px;font-size:13.5px;letter-spacing:.2px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin-bottom:14px;box-shadow:var(--shadow);min-width:0}
+  .card h3{margin:0 0 10px;font-size:13.5px;letter-spacing:-.1px;color:#0f172a}
   .card h3 .sub{color:var(--mut);font-weight:400;font-size:11px;margin-left:6px}
   table{width:100%;border-collapse:collapse;font-size:12.3px}
-  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
-  th{color:var(--mut);font-weight:600;font-size:10.7px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;background:var(--panel)}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line2);text-align:left;white-space:nowrap}
+  th{color:#475569;font-weight:700;font-size:10.7px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;background:#f1f5f9;z-index:2;border-bottom:1px solid var(--line)}
   td.num,th.num{text-align:right}
-  tbody tr:hover{background:#1b2438}
+  tbody tr:nth-child(even) td{background:var(--stripe)}
+  tbody tr:hover td{background:var(--hover)}
   tr.clickable{cursor:pointer}
-  .tblwrap{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:9px}
-  .pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:700;background:var(--chip);color:var(--mut)}
-  .pill.rm{background:#20324f;color:#7fb2ff}.pill.pm{background:#2c2545;color:#c39bff}
-  .pill.no{background:#3a2124;color:#f08a8d}
-  .bar{height:8px;border-radius:5px;background:var(--panel2);overflow:hidden;min-width:60px}
+  tr.clickable:hover td{background:var(--hover)}
+  .tblwrap{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);overscroll-behavior:contain;max-width:100%}
+  .pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:700;background:var(--chip);color:#475569}
+  .pill.rm{background:#e0ecff;color:#1e40af}.pill.pm{background:#f1e9ff;color:#6b21a8}
+  .pill.no{background:var(--neg-soft);color:var(--neg)}.pill.ok{background:var(--pos-soft);color:var(--pos)}
+  .bar{height:8px;border-radius:5px;background:#eef2f7;overflow:hidden;min-width:60px}
   .bar>i{display:block;height:100%}
   canvas{width:100%;display:block}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--mut);margin-top:8px}
@@ -74,33 +87,35 @@
   .flexhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
   .muted{color:var(--mut)}
   .small{font-size:11px}
-  .warnbox{background:#33290f;border:1px solid #6b5518;color:#f0d089;border-radius:8px;padding:9px 11px;font-size:12px;margin-bottom:12px}
+  .warnbox{background:var(--warn-soft);border:1px solid var(--warn-line);color:var(--warn);border-radius:9px;padding:9px 11px;font-size:12px;margin-bottom:12px}
   .status{font-size:11.5px;color:var(--mut);min-width:120px}
   .fld-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
   .mrat-sum{display:flex;gap:11px;flex-wrap:wrap;margin:2px 0 12px}
   .mrat-sum .m{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:150px}
-  .mrat-sum .m .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
-  .mrat-sum .m .v{font-size:19px;font-weight:700;margin-top:4px}
+  .mrat-sum .m .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600}
+  .mrat-sum .m .v{font-size:19px;font-weight:700;margin-top:4px;color:#0f172a}
   .mrat-sum .m .s{font-size:11px;color:var(--mut);margin-top:2px}
-  .mrat-wrap{overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+  .mrat-wrap{overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-width:100%}
   .mrat{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap;width:max-content;min-width:100%}
-  .mrat th,.mrat td{padding:5px 8px;border-bottom:1px solid var(--line);border-right:1px solid #22304d;background:var(--panel)}
-  .mrat thead th{position:sticky;background:var(--panel);z-index:3;text-align:center;font-size:10.7px;text-transform:uppercase;letter-spacing:.3px}
+  .mrat th,.mrat td{padding:5px 8px;border-bottom:1px solid var(--line2);border-right:1px solid var(--line2);background:var(--panel)}
+  .mrat thead th{position:sticky;background:#f1f5f9;z-index:3;text-align:center;font-size:10.7px;text-transform:uppercase;letter-spacing:.3px;color:#475569;border-bottom:1px solid var(--line)}
   .mrat thead tr:nth-child(1) th{top:0;height:30px;box-sizing:border-box;color:var(--acc)}
   .mrat thead tr:nth-child(2) th{top:30px;color:var(--mut)}
   .mrat th.sticky-l,.mrat td.sticky-l{position:sticky;left:0;background:var(--panel);text-align:left;white-space:normal;min-width:265px;max-width:330px;z-index:4}
   .mrat th.sticky-l{top:0;z-index:6}
   .mrat td.num,.mrat th.num{text-align:right}
-  .mrat tbody tr:hover td{background:#1b2438}
-  .mrat tfoot td{position:sticky;bottom:0;background:var(--panel2);font-weight:700;border-top:2px solid var(--acc);z-index:3}
-  .mrat tfoot td.sticky-l{background:var(--panel2);z-index:6}
+  .mrat tbody tr:nth-child(even) td{background:#fcfdfe}
+  .mrat tbody tr:hover td{background:var(--hover)}
+  .mrat tfoot td{position:sticky;bottom:0;background:#f1f5f9;font-weight:700;border-top:2px solid var(--acc);z-index:3}
+  .mrat tfoot td.sticky-l{background:#f1f5f9;z-index:6}
   .ms{position:relative;min-width:135px}
-  .ms-btn{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px;padding:6px 9px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt);font-size:12.5px;cursor:pointer}
+  .ms-btn{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px;padding:6px 9px;background:var(--panel);border:1px solid #cbd5e1;border-radius:7px;color:var(--txt);font-size:12.5px;cursor:pointer}
+  .ms-btn:hover{border-color:var(--acc2);background:var(--acc-soft)}
   .ms-btn:after{content:'\25BE';color:var(--mut)}
-  .ms-panel{position:absolute;z-index:60;top:calc(100% + 4px);left:0;min-width:220px;max-height:300px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;display:none;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+  .ms-panel{position:absolute;z-index:60;top:calc(100% + 4px);left:0;min-width:220px;max-height:300px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:6px;display:none;box-shadow:var(--shadow-lg)}
   .ms.open .ms-panel{display:block}
   .ms-panel label{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:5px;cursor:pointer;white-space:nowrap;font-size:12.5px;color:var(--txt)}
-  .ms-panel label:hover{background:#22304d}
+  .ms-panel label:hover{background:var(--acc-soft)}
   .ms-panel input{accent-color:var(--acc)}
   .mrat th.sbu-col,.mrat td.sbu-col{position:sticky;left:0;width:56px;min-width:56px;max-width:56px;background:var(--panel);z-index:7;text-align:left;color:var(--acc);font-weight:700}
   .mrat th.sbu-col{top:0}
@@ -108,7 +123,47 @@
   .mrat th.item-col{top:0}
   .mrat th.uom-col,.mrat td.uom-col{position:sticky;left:306px;width:56px;min-width:56px;max-width:56px;background:var(--panel);z-index:5;text-align:left;color:var(--mut);font-size:10.5px}
   .mrat th.uom-col{top:0}
-  .mrat tfoot td.sbu-col,.mrat tfoot td.item-col,.mrat tfoot td.uom-col{background:var(--panel2)}
+  .mrat tfoot td.sbu-col,.mrat tfoot td.item-col,.mrat tfoot td.uom-col{background:#f1f5f9}
+  /* --- light theme: semantic + helper states --- */
+  .pos{color:var(--pos)!important}.neg{color:var(--neg)!important}.neu{color:var(--neu)!important}
+  .pos-bg{background:var(--pos-soft)!important}.neg-bg{background:var(--neg-soft)!important}
+  .top80 td{background:var(--top80)!important}
+  a:hover{text-decoration:underline}
+  .rowstatus{font-size:11px;color:var(--mut);padding:6px 8px;font-style:italic}
+  .skel{position:relative;overflow:hidden;background:#eef2f7;border-radius:7px}
+  .skel:after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);animation:sk 1.2s infinite}
+  @keyframes sk{100%{transform:translateX(100%)}}
+  .skel-line{height:11px;margin:9px 0}
+  .tblwrap::-webkit-scrollbar,.mrat-wrap::-webkit-scrollbar{width:11px;height:11px}
+  .tblwrap::-webkit-scrollbar-thumb,.mrat-wrap::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px;border:2px solid #fff}
+  .tblwrap::-webkit-scrollbar-thumb:hover,.mrat-wrap::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+  .tblwrap::-webkit-scrollbar-track,.mrat-wrap::-webkit-scrollbar-track{background:#f8fafc}
+  @media(max-width:1000px){
+    header{padding:10px 12px}
+    main{padding:14px 12px 48px}
+    .grid2{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(auto-fit,minmax(142px,1fr))}
+    .kpi .v{font-size:18px}
+  }
+  @media(max-width:700px){
+    body{font-size:12.5px}
+    .brand{gap:6px 10px}
+    .brand h1{font-size:16px}
+    .brand .meta{flex:1 1 100%;order:3;min-width:0;font-size:10.5px}
+    .brand .status{order:4;min-width:0;font-size:10.5px}
+    #btnRefresh{order:2;margin-left:auto}
+    .tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px;scrollbar-width:thin}
+    .tab{flex:0 0 auto;padding:5px 11px}
+    .toolbar{padding:10px;gap:9px}
+    .toolbar>.fld{flex:1 1 140px;min-width:0}
+    select,input[type=text]{min-width:0;width:100%}
+    input[type=text]{min-width:120px}
+    .mrat-sum .m{flex:1 1 140px;min-width:130px}
+    .card{padding:11px}
+    .mrat th.item-col,.mrat td.item-col{width:170px;min-width:170px;max-width:170px}
+    .mrat th.uom-col,.mrat td.uom-col{left:226px}
+    .mrat th.sticky-l,.mrat td.sticky-l{min-width:190px;max-width:230px}
+  }
 </style>
 </head>
 <body>
@@ -156,7 +211,7 @@
     <div class="grid2">
       <div class="card"><h3>SBU-wise Savings <span class="sub">(current issue value, LY &amp; budget savings)</span></h3><div id="execSbu"></div></div>
       <div class="card"><h3>Monthly Trend <span class="sub">(fiscal year Jul &rarr; Jun)</span></h3><canvas id="cvTrend" height="230"></canvas>
-        <div class="legend"><span><i style="background:#4f8cff"></i>Current issue value</span><span><i style="background:#8b97b4"></i>LY benchmark</span><span><i style="background:#e0a126"></i>Budget benchmark</span><span><i style="background:#25b06b"></i>LY savings</span><span><i style="background:#d6634b"></i>Budget savings</span></div>
+        <div class="legend"><span><i style="background:#2563eb"></i>Current issue value</span><span><i style="background:#7c8ba1"></i>LY benchmark</span><span><i style="background:#d97706"></i>Budget benchmark</span><span><i style="background:#16a34a"></i>LY savings</span><span><i style="background:#dc2626"></i>Budget savings</span></div>
       </div>
     </div>
     <div class="grid2">
@@ -172,7 +227,7 @@
     <div class="grid2">
       <div class="card"><h3>Current vs LY vs Budget <span class="sub">(rate &amp; value)</span></h3><div id="sbuCmp"></div></div>
       <div class="card"><h3 id="sbuTrendTitle">Monthly Trend</h3><canvas id="cvTrendSbu" height="200"></canvas>
-        <div class="legend"><span><i style="background:#4f8cff"></i>Current value</span><span><i style="background:#25b06b"></i>LY savings</span><span><i style="background:#e0a126"></i>Budget savings</span></div>
+        <div class="legend"><span><i style="background:#2563eb"></i>Current value</span><span><i style="background:#16a34a"></i>LY savings</span><span><i style="background:#d97706"></i>Budget savings</span></div>
       </div>
     </div>
   </section>
@@ -215,7 +270,7 @@
         <button id="btnMrChart">Download chart (PNG)</button>
       </div>
       <canvas id="cvMr" height="200"></canvas>
-      <div class="legend" id="mrLegend"><span><i style="background:#4f8cff"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#e0a126"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#25b06b"></i>Actual Sales (net order value)</span></div>
+      <div class="legend" id="mrLegend"><span><i style="background:#2563eb"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#d97706"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#16a34a"></i>Actual Sales (net order value)</span></div>
     </div>
     <div class="card">
       <div class="flexhead"><h3 style="margin:0">Monthly pivot <span class="sub">SBU &rarr; Item &rarr; month</span></h3><button id="btnMrCsv">Export table (CSV)</button></div>
@@ -232,7 +287,7 @@
       </div>
       <div id="paretoSummary" class="mrat-sum"></div>
       <canvas id="cvPareto" height="260"></canvas>
-      <div class="legend"><span><i style="background:#4f8cff"></i>Material COGS (top materials)</span><span><i style="background:#5a6b8c"></i>Beyond 80%</span><span><i style="background:#e0a126"></i>Cumulative %</span><span><i style="background:#e5484d"></i>80% threshold</span></div>
+      <div class="legend"><span><i style="background:#2563eb"></i>Material COGS (top materials)</span><span><i style="background:#94a3b8"></i>Beyond 80%</span><span><i style="background:#d97706"></i>Cumulative %</span><span><i style="background:#dc2626"></i>80% threshold</span></div>
       <div class="note small">Pareto ranks materials by COGS value for the selected period; the line is cumulative contribution. Materials within the first ~80% are highlighted. Uses the top filters (FY / MTD-YTD / month) and the SBU / RM-PM / category / search filters.</div>
     </div>
     <div class="card">
@@ -325,6 +380,49 @@ function fPct(v){return v==null||isNaN(v)?'—':(v*100).toFixed(1)+'%';}
 function cls(v){return v>0.0001?'pos':(v<-0.0001?'neg':'neu');}
 function sign(v){return v>0?'+':'';}
 
+/* Chart palette (kept in one place so every canvas matches the light theme) */
+const PAL={blue:'#2563eb',slate:'#7c8ba1',amber:'#d97706',green:'#16a34a',red:'#dc2626',purple:'#7c3aed',grid:'#e6ebf3',axis:'#64748b',bg:'#ffffff'};
+
+/* Debounce so typing in a search box does not rebuild a table on every keypress. */
+function debounce(fn,ms){let t=null;return function(){const a=arguments,c=this;clearTimeout(t);t=setTimeout(()=>{t=null;fn.apply(c,a);},ms);};}
+
+/* Progressive table body: render the first chunk now, append the rest while idle.
+   Keeps first paint fast for the multi-thousand-row tables. */
+let PROG_GEN=0;
+function cancelProgressive(){PROG_GEN++;}
+function fillRows(tbody,rows,statusEl,chunk){
+  const gen=PROG_GEN, step=chunk||150; let i=0;
+  const paint=()=>{
+    if(gen!==PROG_GEN||!tbody||!tbody.isConnected)return;
+    const end=Math.min(i+step,rows.length);
+    tbody.insertAdjacentHTML('beforeend',rows.slice(i,end).join(''));
+    i=end;
+    if(statusEl){
+      if(i<rows.length){statusEl.textContent='Rendering rows… '+i+' of '+rows.length;statusEl.classList.remove('hidden');}
+      else{statusEl.textContent='';statusEl.classList.add('hidden');}
+    }
+    if(i<rows.length){(window.requestIdleCallback||function(f){setTimeout(f,16);})(paint,{timeout:200});}
+  };
+  paint();
+}
+
+/* Canvas cache so window resizes redraw charts without rebuilding tables. */
+const CHART_CACHE={};
+function drawLine(id,labels,series){
+  const cv=document.getElementById(id); if(!cv)return;
+  CHART_CACHE[id]={type:'line',labels:labels,series:series};
+  lineChart(cv,labels,series);
+}
+function redrawCharts(){
+  Object.keys(CHART_CACHE).forEach(id=>{
+    const cv=document.getElementById(id);
+    if(!cv||cv.offsetParent===null)return;
+    const c=CHART_CACHE[id];
+    if(c.type==='line')lineChart(cv,c.labels,c.series);
+    else if(c.type==='pareto')paretoChart(cv,c.rows,c.total);
+  });
+}
+
 /* ============================ data-bound state ============================ */
 let DATA={sbus:[],items:[],budget:[]};
 let META={};
@@ -334,13 +432,21 @@ let BINDEX={byKey:{},rowsBySbu:{},dups:[]};
 let FYS=[];
 let ASOF=null;
 let DATA_MONTHS=new Set();
+let DATA_VERSION=0;
+let BUDGET_MEMO=new Map();
+let COMPUTE_CACHE={sig:'',rows:null};
 const state={fy:null,mode:'YTD',month:null,sbu:[],kind:[],cat:[],src:[],text:'',sbuSel:'ALL'};
 
 function setData(d){
   DATA = (d && d.items) ? d : {sbus:[],items:[],budget:[]};
   META = DATA.meta || DATA;
   SBU={}; DATA.sbus.forEach(s=>SBU[s.bu]=s);
-  ITEMS_BY_KEY={}; DATA.items.forEach(it=>{ITEMS_BY_KEY[it.bu+'|'+it.itemId]=it;});
+  ITEMS_BY_KEY={}; DATA.items.forEach(it=>{
+    ITEMS_BY_KEY[it.bu+'|'+it.itemId]=it;
+    /* precompute per-item filter fields once per dataset */
+    it._q=(String(it.name||'')+' '+String(it.code||'')).toUpperCase();
+    it._src=srcOf(it.name);
+  });
   BINDEX={byKey:{},rowsBySbu:{},dups:[]};
   DATA.budget.forEach(b=>{
     if(!b.sbu) return;
@@ -354,6 +460,7 @@ function setData(d){
   ASOF=META.asOf || (DATA.items[0]?Object.keys(DATA.items[0].months).sort().pop():null);
   DATA_MONTHS=new Set();
   DATA.items.forEach(it=>Object.keys(it.months).forEach(m=>{const x=it.months[m];if(x&&(x.q!==0||x.v!==0))DATA_MONTHS.add(m);}));
+  BUDGET_MEMO=new Map(); COMPUTE_CACHE={sig:'',rows:null}; DATA_VERSION++;
 }
 function syncState(){
   if(!FYS.includes(state.fy)) state.fy=FYS[0]||null;
@@ -368,6 +475,13 @@ function periodMonths(){
 
 /* ============================ budget ============================ */
 function budgetFor(it){
+  const k=it.bu+'|'+it.itemId;
+  if(BUDGET_MEMO.has(k))return BUDGET_MEMO.get(k);
+  const v=budgetForRaw(it);
+  BUDGET_MEMO.set(k,v);
+  return v;
+}
+function budgetForRaw(it){
   const sc=SBU[it.bu]?SBU[it.bu].code:null; if(!sc) return null;
   if(it.code){const k=sc+'|'+norm(it.code); if(BINDEX.byKey[k]) return {row:BINDEX.byKey[k],method:'code'};}
   const k2=sc+'|'+norm(it.name); if(BINDEX.byKey[k2]) return {row:BINDEX.byKey[k2],method:'desc'};
@@ -382,15 +496,21 @@ function budgetRateForMonth(row,m){return (row&&row.rates[m]!=null)?row.rates[m]
 
 /* ============================ compute ============================ */
 function sumItem(it,months,ly){let q=0,v=0;for(const m of months){const k=ly?shiftY(m,-1):m;const d=it.months[k];if(d){q+=d.q;v+=d.v;}}return {q:q,v:v,rate:q?v/q:null};}
+function computeSig(){
+  return [state.fy,state.mode,state.month,state.sbu.join(','),state.kind.join(','),
+          state.cat.join(','),state.src.join(','),state.text,DATA_VERSION].join('§');
+}
 function computeItems(){
-  const months=periodMonths(); const out=[];
+  const sig=computeSig();
+  if(COMPUTE_CACHE.rows && COMPUTE_CACHE.sig===sig) return COMPUTE_CACHE.rows;
+  const months=periodMonths(); const out=[]; const txt=state.text?state.text.toUpperCase():'';
   DATA.items.forEach(it=>{
     const sc=SBU[it.bu]; if(!sc) return;
     if(state.sbu.length && !state.sbu.includes(it.bu)) return;
     if(state.kind.length && !state.kind.includes(it.kind)) return;
     if(state.cat.length && !state.cat.includes(it.cat)) return;
-    if(state.text && !(it.name+' '+it.code).toUpperCase().includes(state.text.toUpperCase())) return;
-    if(state.src.length && !state.src.includes(srcOf(it.name))) return;
+    if(txt && !it._q.includes(txt)) return;
+    if(state.src.length && !state.src.includes(it._src)) return;
     const ly=sumItem(it,months,true), cur=sumItem(it,months,false);
     const bud=budgetFor(it); const br=bud?budgetRate(bud.row,months):null;
     const r={bu:it.bu,itemId:it.itemId,sbu:sc.code,sbuName:sc.name,code:it.code,name:it.name,kind:it.kind,cat:it.cat,uom:it.uom,
@@ -402,6 +522,7 @@ function computeItems(){
     r.budBench=(r.budRate!=null)?r.budRate*r.cq:null;
     out.push(r);
   });
+  COMPUTE_CACHE={sig:sig,rows:out};
   return out;
 }
 function totals(rows){
@@ -422,16 +543,17 @@ function mount(cv){const dpr=window.devicePixelRatio||1;const w=cv.clientWidth||
   const h=parseInt(cv.dataset.h,10)||220;
   cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';
   const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  x.fillStyle='#161d2e';x.fillRect(0,0,w,h);return {x,w,h};}
+  x.fillStyle=PAL.bg;x.fillRect(0,0,w,h);return {x,w,h};}
 function lineChart(cv,labels,series){
   const {x,w,h}=mount(cv); const padL=54,padR=12,padT=12,padB=30; const iw=w-padL-padR, ih=h-padT-padB;
   let max=0,min=0; series.forEach(s=>s.values.forEach(v=>{if(v==null)return;if(v>max)max=v;if(v<min)min=v;}));
   if(max===0&&min===0)max=1; if(min>0)min=0; if(max<0)max=0;
   const span=max-min||1; const X=i=>padL+(labels.length<=1?iw/2:iw*i/(labels.length-1)); const Y=v=>padT+ih-(v-min)/span*ih;
-  x.strokeStyle='#2a3550';x.fillStyle='#93a0bd';x.font='10px Segoe UI';
+  x.strokeStyle=PAL.grid;x.fillStyle=PAL.axis;x.font='10px "Segoe UI",Roboto,Arial,sans-serif';
   for(let i=0;i<=4;i++){const y=padT+ih*i/4;x.beginPath();x.moveTo(padL,y);x.lineTo(w-padR,y);x.stroke();x.fillText(fCr(max-(span*i/4)),4,y+3);}
-  if(min<0){x.strokeStyle='#3a4666';x.beginPath();x.moveTo(padL,Y(0));x.lineTo(w-padR,Y(0));x.stroke();}
-  labels.forEach((lb,i)=>{x.fillStyle='#93a0bd';x.fillText(lb,X(i)-15,padT+ih+14);});
+  if(min<0){x.strokeStyle='#cbd5e1';x.beginPath();x.moveTo(padL,Y(0));x.lineTo(w-padR,Y(0));x.stroke();}
+  const lstep=w<480?Math.ceil(labels.length/6):(w<720&&labels.length>8?2:1);
+  labels.forEach((lb,i)=>{if(i%lstep!==0&&i!==labels.length-1)return;x.fillStyle=PAL.axis;x.fillText(lb,Math.min(Math.max(X(i)-15,2),w-padR-30),padT+ih+14);});
   series.forEach(s=>{x.strokeStyle=s.color;x.lineWidth=2;x.beginPath();let started=false;
     s.values.forEach((v,i)=>{if(v==null)return;const px=X(i),py=Y(v);if(!started){x.moveTo(px,py);started=true;}else x.lineTo(px,py);});x.stroke();
     x.fillStyle=s.color;s.values.forEach((v,i)=>{if(v==null)return;x.beginPath();x.arc(X(i),Y(v),2.4,0,7);x.fill();});});
@@ -455,11 +577,12 @@ function renderMiniTable(items,key){
   if(!items.length)return '<div class="muted small">None.</div>';
   return '<div class="tblwrap" style="max-height:230px"><table><thead><tr><th>SBU</th><th>Item</th><th class="num">Rate</th><th class="num">Ref rate</th><th class="num">Saving</th></tr></thead><tbody>'+
     items.map(r=>{const ref=key==='lySav'?r.lyRate:r.budRate;const v=r[key];
-      return '<tr><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,40)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+f2(ref)+'</td><td class="num" style="color:'+(v>=0?'#25b06b':'#e5484d')+';font-weight:600">'+sign(v)+fCr(v)+'</td></tr>';}).join('')+'</tbody></table></div>';
+      return '<tr><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,40)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+f2(ref)+'</td><td class="num '+cls(v)+'" style="font-weight:600">'+sign(v)+fCr(v)+'</td></tr>';}).join('')+'</tbody></table></div>';
 }
-function renderExec(rows){
-  const t=totals(rows);
-  document.getElementById('kpis').innerHTML=kpiHTML(t);
+function renderKpis(rows){
+  document.getElementById('kpis').innerHTML=kpiHTML(totals(rows));
+}
+function renderExecBody(rows){
   const bySbu={};
   rows.forEach(r=>{if(r.cq<=0)return;const k=r.sbu;const o=bySbu[k]=bySbu[k]||{sbu:k,name:r.sbuName,cv:0,ly:0,bud:0,lyB:0,budB:0};o.cv+=r.cv;
     if(r.lySav!=null){o.ly+=r.lySav;o.lyB+=r.lyBench;} if(r.budSav!=null){o.bud+=r.budSav;o.budB+=r.budBench;}});
@@ -478,7 +601,7 @@ function renderExec(rows){
       if(lq>0){const lr=lv/lq;lb+=lr*q;if(q>0)ls+=(lr-(v/q))*q;}
       const br=r.budRow?budgetRateForMonth(r.budRow,m):null;if(br!=null&&q>0){bb+=br*q;bs+=(br-(v/q))*q;}});
     cur.push(cv);lyB.push(lb);budB.push(bb);lyS.push(ls);budS.push(bs);});
-  lineChart(document.getElementById('cvTrend'),months.map(monLabel),[{color:'#4f8cff',values:cur},{color:'#8b97b4',values:lyB},{color:'#e0a126',values:budB},{color:'#25b06b',values:lyS},{color:'#d6634b',values:budS}]);
+  drawLine('cvTrend',months.map(monLabel),[{color:PAL.blue,values:cur},{color:PAL.slate,values:lyB},{color:PAL.amber,values:budB},{color:PAL.green,values:lyS},{color:PAL.red,values:budS}]);
 
   const valid=rows.filter(r=>r.cq>0);
   const byLy=[...valid].filter(r=>r.lySav!=null).sort((a,b)=>b.lySav-a.lySav).slice(0,10);
@@ -510,17 +633,26 @@ function renderSbu(rows){
       const br=r.budRow?budgetRateForMonth(r.budRow,m):null;if(br!=null&&q>0)bs+=(br-v/q)*q;});
     cur.push(cv);lyS.push(ls);budS.push(bs);});
   document.getElementById('sbuTrendTitle').innerHTML=(state.sbuSel==='ALL'?'All SBU':state.sbuSel)+' &mdash; Monthly Trend';
-  lineChart(document.getElementById('cvTrendSbu'),months.map(monLabel),[{color:'#4f8cff',values:cur},{color:'#25b06b',values:lyS},{color:'#e0a126',values:budS}]);
+  drawLine('cvTrendSbu',months.map(monLabel),[{color:PAL.blue,values:cur},{color:PAL.green,values:lyS},{color:PAL.amber,values:budS}]);
   const list=[...scoped].filter(r=>r.cq>0).sort((a,b)=>(b.lySav||-1e18)-(a.lySav||-1e18));
   const wrap=document.getElementById('sbuItems');
-  wrap.innerHTML='<div class="tblwrap"><table><thead><tr><th>Code</th><th>Item</th><th>UOM</th><th>Type</th><th class="num">Qty</th><th class="num">Cur rate</th><th class="num">LY rate</th><th class="num">LY saving</th><th class="num">Bud rate</th><th class="num">Bud saving</th></tr></thead><tbody>'+
-    list.map((r,i)=>'<tr class="clickable" data-i="'+i+'"><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,48)+'</td><td class="muted small">'+esc(r.uom||'')+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
+  const rowHTML=list.map((r,i)=>'<tr class="clickable" data-i="'+i+'"><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,48)+'</td><td class="muted small">'+esc(r.uom||'')+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
       '<td class="num">'+fN(r.cq)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+(r.lyRate!=null?f2(r.lyRate):'<span class="pill no">N/A</span>')+'</td>'+
       '<td class="num '+cls(r.lySav)+'">'+(r.lySav!=null?sign(r.lySav)+fCr(r.lySav):'—')+'</td>'+
       '<td class="num">'+(r.budRate!=null?f2(r.budRate):'<span class="pill no">No Budget</span>')+'</td>'+
-      '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>'+
-      '<tr class="hidden" id="drill'+i+'"><td colspan="10">'+drillHTML(r)+'</td></tr>').join('')+'</tbody></table></div>';
-  wrap.querySelectorAll('tr.clickable').forEach(tr=>tr.onclick=()=>{document.getElementById('drill'+tr.dataset.i).classList.toggle('hidden');});
+      '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>');
+  wrap.innerHTML='<div class="tblwrap" style="max-height:640px"><table><thead><tr><th>Code</th><th>Item</th><th>UOM</th><th>Type</th><th class="num">Qty</th><th class="num">Cur rate</th><th class="num">LY rate</th><th class="num">LY saving</th><th class="num">Bud rate</th><th class="num">Bud saving</th></tr></thead><tbody></tbody></table><div class="rowstatus hidden"></div></div>';
+  const tb=wrap.querySelector('tbody'), st=wrap.querySelector('.rowstatus');
+  fillRows(tb,rowHTML,st,150);
+  /* Drill rows are built only when opened, instead of one hidden row per item. */
+  wrap.querySelector('table').onclick=e=>{
+    const tr=e.target.closest&&e.target.closest('tr.clickable[data-i]'); if(!tr)return;
+    const next=tr.nextElementSibling;
+    if(next&&next.classList.contains('drillrow')){next.classList.toggle('hidden');return;}
+    const row=document.createElement('tr'); row.className='drillrow';
+    row.innerHTML='<td colspan="10">'+drillHTML(list[parseInt(tr.dataset.i,10)])+'</td>';
+    tr.parentNode.insertBefore(row,tr.nextSibling);
+  };
 }
 function drillHTML(r){
   const it=ITEMS_BY_KEY[r.bu+'|'+r.itemId]; if(!it)return '';
@@ -538,15 +670,17 @@ function drillHTML(r){
 function renderItems(rows){
   const list=[...rows].filter(r=>r.cq>0).sort((a,b)=>(b.cv||0)-(a.cv||0));
   document.getElementById('itemCount').textContent='('+list.length+' items)';
-  document.getElementById('itemTable').innerHTML='<div class="tblwrap" style="max-height:640px"><table><thead><tr>'+
-    '<th>SBU</th><th>Code</th><th>Item</th><th>UOM</th><th>Type</th><th>Category</th><th class="num">Qty</th><th class="num">Current rate</th><th class="num">Current value</th>'+
-    '<th class="num">LY rate</th><th class="num">LY savings</th><th class="num">Budget rate</th><th class="num">Budget savings</th></tr></thead><tbody>'+
-    list.map(r=>'<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name)+'</td><td class="muted small">'+esc(r.uom||'')+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
+  const html=list.map(r=>'<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name)+'</td><td class="muted small">'+esc(r.uom||'')+'</td><td><span class="pill '+r.kind.toLowerCase()+'">'+r.kind+'</span></td>'+
       '<td class="muted small">'+esc(r.cat)+'</td><td class="num">'+fN(r.cq)+'</td><td class="num">'+f2(r.cRate)+'</td><td class="num">'+fN(r.cv)+'</td>'+
       '<td class="num">'+(r.lyRate!=null?f2(r.lyRate):'<span class="pill no">N/A</span>')+'</td>'+
       '<td class="num '+cls(r.lySav)+'">'+(r.lySav!=null?sign(r.lySav)+fCr(r.lySav):'—')+'</td>'+
       '<td class="num">'+(r.budRate!=null?f2(r.budRate):'<span class="pill no">No Budget</span>')+'</td>'+
-      '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>').join('')+'</tbody></table></div>';
+      '<td class="num '+cls(r.budSav)+'">'+(r.budSav!=null?sign(r.budSav)+fCr(r.budSav):'—')+'</td></tr>');
+  const host=document.getElementById('itemTable');
+  host.innerHTML='<div class="tblwrap" style="max-height:640px"><table><thead><tr>'+
+    '<th>SBU</th><th>Code</th><th>Item</th><th>UOM</th><th>Type</th><th>Category</th><th class="num">Qty</th><th class="num">Current rate</th><th class="num">Current value</th>'+
+    '<th class="num">LY rate</th><th class="num">LY savings</th><th class="num">Budget rate</th><th class="num">Budget savings</th></tr></thead><tbody></tbody></table><div class="rowstatus hidden"></div></div>';
+  fillRows(host.querySelector('tbody'),html,host.querySelector('.rowstatus'),150);
 }
 function dqTable(items){
   if(!items.length)return '<div class="muted small">None in current filter.</div>';
@@ -614,14 +748,14 @@ function applyMonthlyView(){
   document.querySelectorAll('#mrView button').forEach(x=>x.classList.toggle('active', x.dataset.v===MRAT.view));
 }
 function monthlyItems(){
-  const list=[];
+  const list=[]; const txt=state.text?state.text.toUpperCase():'';
   DATA.items.forEach(it=>{
     const sc=SBU[it.bu]; if(!sc)return;
     if(state.sbu.length && !state.sbu.includes(it.bu))return;
     if(state.kind.length && !state.kind.includes(it.kind))return;
     if(state.cat.length && !state.cat.includes(it.cat))return;
-    if(state.src.length && !state.src.includes(srcOf(it.name)))return;
-    if(state.text && !(it.name+' '+it.code).toUpperCase().includes(state.text.toUpperCase()))return;
+    if(state.src.length && !state.src.includes(it._src))return;
+    if(txt && !it._q.includes(txt))return;
     list.push(it);
   });
   return list;
@@ -636,7 +770,7 @@ function renderMonthly(){
   const sum=document.getElementById('mratSummary');
   if(MRAT.view==='le'){ renderMonthlyLE(wrap,sum); return; }
   const ct=document.getElementById('mrChartTitle'); if(ct) ct.innerHTML='COGS vs Budgeted COGS vs Actual Sales <span class="sub">(SBU level, BDT crore)</span>';
-  const lg=document.getElementById('mrLegend'); if(lg) lg.innerHTML='<span><i style="background:#4f8cff"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#e0a126"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#25b06b"></i>Actual Sales (net order value)</span>';
+  const lg=document.getElementById('mrLegend'); if(lg) lg.innerHTML='<span><i style="background:#2563eb"></i>Actual COGS (direct RM/PM issue)</span><span><i style="background:#d97706"></i>Budgeted COGS (GL 4810001)</span><span><i style="background:#16a34a"></i>Actual Sales (net order value)</span>';
   try{
     const months=monthsBetween(MRAT.from,MRAT.to);
     if(!months.length){wrap.innerHTML='<div class="muted small" style="padding:10px">Choose a valid From/To month range.</div>';if(sum)sum.innerHTML='';return;}
@@ -673,10 +807,10 @@ function renderMonthly(){
     const budSeries=months.map(m=>budByM[m]!=null?budByM[m]:null);
     const salSeries=months.map(m=>salByM[m]!=null?salByM[m]:null);
     const cvMr=document.getElementById('cvMr');
-    if(cvMr) lineChart(cvMr, months.map(monLabel), [
-      {color:'#4f8cff', values: actualCogs},
-      {color:'#e0a126', values: budSeries},
-      {color:'#25b06b', values: salSeries}
+    if(cvMr) drawLine('cvMr', months.map(monLabel), [
+      {color:PAL.blue, values: actualCogs},
+      {color:PAL.amber, values: budSeries},
+      {color:PAL.green, values: salSeries}
     ]);
     const overall=tq?tv/tq:null;
     if(sum){
@@ -690,17 +824,18 @@ function renderMonthly(){
       if(showQ)h2+='<th class="num">Qty</th>'; if(showV)h2+='<th class="num">Value</th>'; if(showR)h2+='<th class="num">Rate</th>';});
     h1+='<th class="num chg" rowspan="2">YoY change</th><th class="num chg" rowspan="2">MoM change</th><th class="num chg" rowspan="2">QoQ change</th>';
     h1+='</tr>'; h2+='</tr>';
-    let body='';
+    const body=[];
     rows.forEach(r=>{
       const sc=SBU[r.it.bu];
-      body+='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(r.it.code+' — '+r.it.name)+'"><span class="muted small">'+esc(r.it.code)+'</span> '+esc(r.it.name)+'</td><td class="uom-col">'+esc(r.it.uom||'')+'</td>';
+      let tr='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(r.it.code+' — '+r.it.name)+'"><span class="muted small">'+esc(r.it.code)+'</span> '+esc(r.it.name)+'</td><td class="uom-col">'+esc(r.it.uom||'')+'</td>';
       r.cells.forEach(c=>{
-        if(showQ)body+='<td class="num">'+(c.q?fQ(c.q):'')+'</td>';
-        if(showV)body+='<td class="num">'+(c.v?fN(c.v):'')+'</td>';
-        if(showR)body+='<td class="num">'+(c.r!=null?f2(c.r):'')+'</td>';
+        if(showQ)tr+='<td class="num">'+(c.q?fQ(c.q):'')+'</td>';
+        if(showV)tr+='<td class="num">'+(c.v?fN(c.v):'')+'</td>';
+        if(showR)tr+='<td class="num">'+(c.r!=null?f2(c.r):'')+'</td>';
       });
-      body+='<td class="num '+chgCls(r.chg.yoy)+'">'+chgTxt(r.chg.yoy)+'</td><td class="num '+chgCls(r.chg.mom)+'">'+chgTxt(r.chg.mom)+'</td><td class="num '+chgCls(r.chg.qoq)+'">'+chgTxt(r.chg.qoq)+'</td>';
-      body+='</tr>';
+      tr+='<td class="num '+chgCls(r.chg.yoy)+'">'+chgTxt(r.chg.yoy)+'</td><td class="num '+chgCls(r.chg.mom)+'">'+chgTxt(r.chg.mom)+'</td><td class="num '+chgCls(r.chg.qoq)+'">'+chgTxt(r.chg.qoq)+'</td>';
+      tr+='</tr>';
+      body.push(tr);
     });
     let foot='';
     if(showQ||showV){
@@ -712,7 +847,8 @@ function renderMonthly(){
       foot+='<td class="num '+chgCls(totalChg.yoy)+'">'+chgTxt(totalChg.yoy)+'</td><td class="num '+chgCls(totalChg.mom)+'">'+chgTxt(totalChg.mom)+'</td><td class="num '+chgCls(totalChg.qoq)+'">'+chgTxt(totalChg.qoq)+'</td>';
       foot+='</tr>';
     }
-    wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
+    wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody></tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
+    fillRows(wrap.querySelector('tbody'),body,null,120);
   }catch(err){
     wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render the monthly table: '+esc(err.message||err)+'</div>';
   }
@@ -752,12 +888,12 @@ function renderMonthlyLE(wrap,sum){
     const leSeries=L.fmonths.map(()=>L.monthly);
     const cats=histMonths.concat(L.fmonths);
     const cv=document.getElementById('cvMr');
-    if(cv) lineChart(cv, cats.map(monLabel), [
-      {color:'#4f8cff', values: histSeries.concat(L.fmonths.map(()=>null))},
-      {color:'#e0a126', values: histMonths.map(()=>null).concat(leSeries)}
+    if(cv) drawLine('cvMr', cats.map(monLabel), [
+      {color:PAL.blue, values: histSeries.concat(L.fmonths.map(()=>null))},
+      {color:PAL.amber, values: histMonths.map(()=>null).concat(leSeries)}
     ]);
     const ct=document.getElementById('mrChartTitle'); if(ct) ct.innerHTML='LE COGS — 12-month forecast from '+monLabel(L.start)+' <span class="sub">(SBU level, BDT crore; blue = historical actual)</span>';
-    const lg=document.getElementById('mrLegend'); if(lg) lg.innerHTML='<span><i style="background:#4f8cff"></i>Historical actual COGS</span><span><i style="background:#e0a126"></i>LE COGS (projected)</span>';
+    const lg=document.getElementById('mrLegend'); if(lg) lg.innerHTML='<span><i style="background:#2563eb"></i>Historical actual COGS</span><span><i style="background:#d97706"></i>LE COGS (projected)</span>';
     if(sum){
       sum.innerHTML='<div class="m"><div class="l">LE COGS (next 12 months)</div><div class="v">'+fCr(total12)+'</div><div class="s">projected total</div></div>'+
         '<div class="m"><div class="l">Avg monthly LE COGS</div><div class="v">'+fCr(L.monthly)+'</div><div class="s">per month</div></div>'+
@@ -769,12 +905,13 @@ function renderMonthlyLE(wrap,sum){
     let h2='<tr>';
     L.fmonths.forEach(m=>{h1+='<th colspan="'+ncol+'">'+monLabel(m)+'</th>'; if(showQ)h2+='<th class="num">Qty</th>'; if(showV)h2+='<th class="num">LE COGS</th>'; if(showR)h2+='<th class="num">Rate</th>';});
     h1+='</tr>'; h2+='</tr>';
-    let body='';
+    const body=[];
     L.rows.forEach(rw=>{
       const sc=SBU[rw.it.bu];
-      body+='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(rw.it.code+' — '+rw.it.name)+'"><span class="muted small">'+esc(rw.it.code)+'</span> '+esc(rw.it.name)+'</td><td class="uom-col">'+esc(rw.it.uom||'')+'</td>';
-      L.fmonths.forEach(()=>{ if(showQ)body+='<td class="num">'+fQ(rw.avgQty)+'</td>'; if(showV)body+='<td class="num">'+fN(rw.v)+'</td>'; if(showR)body+='<td class="num">'+f2(rw.rate)+'</td>'; });
-      body+='</tr>';
+      let tr='<tr><td class="sbu-col">'+esc(sc?sc.code:'')+'</td><td class="item-col" title="'+esc(rw.it.code+' — '+rw.it.name)+'"><span class="muted small">'+esc(rw.it.code)+'</span> '+esc(rw.it.name)+'</td><td class="uom-col">'+esc(rw.it.uom||'')+'</td>';
+      L.fmonths.forEach(()=>{ if(showQ)tr+='<td class="num">'+fQ(rw.avgQty)+'</td>'; if(showV)tr+='<td class="num">'+fN(rw.v)+'</td>'; if(showR)tr+='<td class="num">'+f2(rw.rate)+'</td>'; });
+      tr+='</tr>';
+      body.push(tr);
     });
     let foot='';
     if(showQ||showV){
@@ -783,7 +920,8 @@ function renderMonthlyLE(wrap,sum){
       L.fmonths.forEach(()=>{ if(showQ)foot+='<td class="num">'+fQ(tq)+'</td>'; if(showV)foot+='<td class="num">'+fN(L.monthly)+'</td>'; if(showR)foot+='<td class="num"></td>'; });
       foot+='</tr>';
     }
-    wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
+    wrap.innerHTML='<table class="mrat"><thead>'+h1+h2+'</thead><tbody></tbody>'+(foot?'<tfoot>'+foot+'</tfoot>':'')+'</table>';
+    fillRows(wrap.querySelector('tbody'),body,null,120);
     MRAT.last={months:L.fmonths,
       rows:L.rows.map(r=>({it:r.it,cells:L.fmonths.map(()=>({q:r.avgQty,v:r.v,r:r.rate}))})),
       showQ:showQ,showV:showV,showR:showR,
@@ -804,15 +942,15 @@ function paretoChart(cv,rows,total){
   const data=rows.slice(0,N);
   const maxV=Math.max(...data.map(d=>d.cv))||1;
   const band=iw/Math.max(1,data.length); const bw=Math.max(2,Math.min(26,band*0.68));
-  x.strokeStyle='#2a3550'; x.fillStyle='#93a0bd'; x.font='10px Segoe UI';
+  x.strokeStyle=PAL.grid; x.fillStyle=PAL.axis; x.font='10px "Segoe UI",Roboto,Arial,sans-serif';
   for(let i=0;i<=4;i++){const y=padT+ih*i/4;x.beginPath();x.moveTo(padL,y);x.lineTo(w-padR,y);x.stroke();x.fillText(fCr(maxV*(1-i/4)),4,y+3);x.fillText((100*(1-i/4)).toFixed(0)+'%',w-padR+6,y+3);}
   let csum=0;
-  x.strokeStyle='#e0a126'; x.lineWidth=2; x.beginPath();
+  x.strokeStyle=PAL.amber; x.lineWidth=2; x.beginPath();
   data.forEach((d,i)=>{
     csum+=d.cv; const cump=csum/total;
     const cx=padL+band*i+band/2;
     const bh=d.cv/maxV*ih; const by=padT+ih-bh;
-    x.fillStyle=(i<needed)?'#4f8cff':'#5a6b8c';
+    x.fillStyle=(i<needed)?PAL.blue:'#cbd5e1';
     x.fillRect(cx-bw/2,by,bw,bh);
     const ly=padT+ih-(cump*ih);
     if(i===0)x.moveTo(cx,ly); else x.lineTo(cx,ly);
@@ -820,10 +958,10 @@ function paretoChart(cv,rows,total){
   });
   x.stroke();
   const y80=padT+ih-(0.8*ih);
-  x.strokeStyle='#e5484d'; x.setLineDash([5,4]); x.lineWidth=1.5;
+  x.strokeStyle=PAL.red; x.setLineDash([5,4]); x.lineWidth=1.5;
   x.beginPath(); x.moveTo(padL,y80); x.lineTo(w-padR,y80); x.stroke(); x.setLineDash([]);
-  x.fillStyle='#e5484d'; x.font='9px Segoe UI'; x.fillText('80%',padL+2,y80-3);
-  x.fillStyle='#93a0bd'; x.font='8px Segoe UI';
+  x.fillStyle=PAL.red; x.font='9px "Segoe UI",Roboto,Arial,sans-serif'; x.fillText('80%',padL+2,y80-3);
+  x.fillStyle=PAL.axis; x.font='9px "Segoe UI",Roboto,Arial,sans-serif';
   data.forEach(d=>{ x.save(); x.translate(d._cx,padT+ih+8); x.rotate(-Math.PI/3); x.textAlign='right'; x.fillText((d.code||'').slice(0,12),0,0); x.restore(); });
 }
 function renderPareto(){
@@ -834,7 +972,7 @@ function renderPareto(){
     const total=rows.reduce((a,r)=>a+r.cv,0);
     let cum=0,needed80=rows.length;
     rows.forEach((r,i)=>{cum+=r.cv;r.cum=cum;r.pct=total?r.cv/total:0;r.cump=total?cum/total:0;if(r.cump>=0.8&&needed80===rows.length)needed80=i+1;});
-    const cv=document.getElementById('cvPareto'); if(cv) paretoChart(cv,rows,total);
+    const cv=document.getElementById('cvPareto'); if(cv){CHART_CACHE['cvPareto']={type:'pareto',rows:rows,total:total};paretoChart(cv,rows,total);}
     if(sum){
       sum.innerHTML='<div class="m"><div class="l">Total COGS</div><div class="v">'+fCr(total)+'</div><div class="s">'+periodLabel()+'</div></div>'+
         '<div class="m"><div class="l">Materials</div><div class="v">'+rows.length+'</div><div class="s">with COGS in period</div></div>'+
@@ -842,10 +980,9 @@ function renderPareto(){
         '<div class="m"><div class="l">Top material</div><div class="v small">'+(rows[0]?esc(rows[0].name).slice(0,26):'—')+'</div><div class="s">'+(rows[0]?fCr(rows[0].cv):'')+'</div></div>';
     }
     const cnt=document.getElementById('paretoCount'); if(cnt) cnt.textContent='('+rows.length+' materials · '+periodLabel()+')';
-    let html='<table><thead><tr><th>#</th><th>SBU</th><th>Item</th><th>Category</th><th>UOM</th><th class="num">COGS (cr)</th><th class="num">% of total</th><th class="num">Cumulative %</th><th>80%</th></tr></thead><tbody>';
-    rows.forEach((r,i)=>{const top=i<needed80;html+='<tr'+(top?' style="background:#1b2a44"':'')+'><td>'+(i+1)+'</td><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,60)+'</td><td class="muted small">'+esc(r.cat)+'</td><td>'+esc(r.uom||'')+'</td><td class="num">'+fCr(r.cv)+'</td><td class="num">'+fPct(r.pct)+'</td><td class="num">'+fPct(r.cump)+'</td><td>'+(top?'<span class="pill ok">top 80%</span>':'')+'</td></tr>';});
-    html+='</tbody></table>';
-    wrap.innerHTML=html;
+    const body=rows.map((r,i)=>{const top=i<needed80;return '<tr'+(top?' class="top80"':'')+'><td>'+(i+1)+'</td><td>'+esc(r.sbu)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,60)+'</td><td class="muted small">'+esc(r.cat)+'</td><td>'+esc(r.uom||'')+'</td><td class="num">'+fCr(r.cv)+'</td><td class="num">'+fPct(r.pct)+'</td><td class="num">'+fPct(r.cump)+'</td><td>'+(top?'<span class="pill ok">top 80%</span>':'')+'</td></tr>';});
+    wrap.innerHTML='<table><thead><tr><th>#</th><th>SBU</th><th>Item</th><th>Category</th><th>UOM</th><th class="num">COGS (cr)</th><th class="num">% of total</th><th class="num">Cumulative %</th><th>80%</th></tr></thead><tbody></tbody></table>';
+    fillRows(wrap.querySelector('tbody'),body,null,100);
     PARETO.last=rows;
   }catch(err){ wrap.innerHTML='<div class="warnbox">Could not render Pareto: '+esc(err.message||err)+'</div>'; }
 }
@@ -860,6 +997,15 @@ const MP_ETA_KEY='cogs_mp_eta_v1';     /* local mirror of the shared values */
 const MP_USER_KEY='cogs_mp_user';      /* display name written to the audit trail */
 const MP_DIRTY=new Set();              /* keys changed here, not yet saved upstream */
 const ETA_SYNC={state:'init',err:'',lastAt:null,timer:null,retry:null,started:false};
+const nfMP=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
+const MP_TS_CACHE=new Map();
+function mpTs(ts){
+  if(!ts)return '';
+  if(MP_TS_CACHE.has(ts))return MP_TS_CACHE.get(ts);
+  const d=new Date(ts); const s=isNaN(d.getTime())?'':d.toLocaleString();
+  MP_TS_CACHE.set(ts,s); return s;
+}
+function mpEtaTip(e){return e.updated_by?('Last updated by '+e.updated_by+(e.updated_at?' · '+mpTs(e.updated_at):'')):'';}
 function mpMeta(){return (DATA && DATA.materialPlanning) ? DATA.materialPlanning : {months:['Nov-26','Dec-26','Jan-27'],sbus:[],rows:[]};}
 function mpEtaKey(r){return String(r.sbu||'')+'|'+String(r.code||'');}
 function mpEtaKeyParts(k){const i=k.indexOf('|');return {sbu:k.slice(0,i),code:k.slice(i+1)};}
@@ -900,16 +1046,16 @@ async function mpEtaLoad(opts){
     const res=await fetch(u,{headers:mpEtaHeaders({Accept:'application/json'}),cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const rows=await res.json();
-    const all=mpEtaAll(); let changed=false;
+    const all=mpEtaAll(); let changed=false; const changedKeys=[];
     (rows||[]).forEach(row=>{
       const k=String(row.sbu||'')+'|'+String(row.item_code||'');
       if(MP_DIRTY.has(k)) return;
       const nv=mpEtaNormRow(row); const old=all[k];
-      if(!old||JSON.stringify(old.eta)!==JSON.stringify(nv.eta)||JSON.stringify(old.qty)!==JSON.stringify(nv.qty)||old.updated_at!==nv.updated_at){all[k]=nv;changed=true;}
+      if(!old||JSON.stringify(old.eta)!==JSON.stringify(nv.eta)||JSON.stringify(old.qty)!==JSON.stringify(nv.qty)||old.updated_at!==nv.updated_at){all[k]=nv;changed=true;changedKeys.push(k);}
     });
     if(changed) mpEtaCacheSet(all);
     mpEtaSetSync('ok');
-    if(changed){const ae=document.activeElement;if(!(ae&&ae.closest&&ae.closest('#mpTable')))renderMaterialPlanning();}
+    if(changed) mpEtaRefreshDom(changedKeys);
     return true;
   }catch(e){
     mpEtaSetSync('err',e&&e.message?e.message:String(e));
@@ -985,6 +1131,21 @@ function mpEtaBoot(){
     window.addEventListener('online',()=>{if(MP_DIRTY.size)mpEtaFlush();});
   }
 }
+/* Patch only the ETA cells that changed upstream — never rebuild the table on a poll. */
+function mpEtaRefreshDom(keys){
+  if(!keys||!keys.length)return;
+  const wrap=document.getElementById('mpTable'); if(!wrap)return;
+  const all=mpEtaAll(); const wanted=new Set(keys);
+  wrap.querySelectorAll('input[data-eta-key]').forEach(inp=>{
+    const k=inp.dataset.etaKey; if(!wanted.has(k))return;
+    if(inp===document.activeElement)return;
+    const p=mpEtaKeyParts(k), e=mpEtaFor(all,{sbu:p.sbu,code:p.code});
+    const idx=parseInt(inp.dataset.etaIdx,10)||0;
+    if(inp.classList.contains('eta-date'))inp.value=e.eta[idx]||'';
+    else inp.value=(e.qty[idx]!=null?e.qty[idx]:'');
+    inp.title=mpEtaTip(e);
+  });
+}
 function mpFiltered(){
   const md=mpMeta(); const q=(MPLAN.search||'').toUpperCase(); const m=MPLAN.month;
   return (md.rows||[]).filter(r=>{
@@ -994,7 +1155,7 @@ function mpFiltered(){
     return true;
   });
 }
-function mpN(v){return v==null||isNaN(v)?'':new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(v);}
+function mpN(v){return v==null||isNaN(v)?'':nfMP.format(v);}
 function mpCovCls(d){if(d==null)return 'neu';if(d<30)return 'neg';if(d<45)return 'neu';return 'pos';}
 function mpShortCls(v){return v==null?'neu':(v<0?'neg':'pos');}
 function renderMaterialPlanning(){
@@ -1028,27 +1189,27 @@ function renderMaterialPlanning(){
     const cnt=document.getElementById('mpCount'); if(cnt) cnt.textContent='('+rows.length+' items · '+mLabel+')';
     const sorted=[...rows].sort((a,b)=>{const av=(a.short&&a.short[m]!=null)?a.short[m]:1e18;const bv=(b.short&&b.short[m]!=null)?b.short[m]:1e18;if(av!==bv)return av-bv;return (b.total3m||0)-(a.total3m||0);});
     const etaStore=mpEtaAll();
-    let html='<table><thead><tr><th>SBU</th><th>Code</th><th>Item</th><th>UOM</th>'+
-      '<th class="num">Nov Req</th><th class="num">Dec Req</th><th class="num">Jan Req</th>'+
-      '<th class="num">Nov Short</th><th class="num">Dec Short</th><th class="num">Jan Short</th>'+
-      '<th>ETA 1</th><th class="num">ETA Qty 1</th><th>ETA 2</th><th class="num">ETA Qty 2</th><th>ETA 3</th><th class="num">ETA Qty 3</th>'+
-      '<th class="num">Cov (d)</th><th>Cov Date</th><th class="num">3M Req</th><th class="num">WH Stock</th><th class="num">In Transit</th><th class="num">Open PR</th><th class="num">Available</th><th>PR Code</th></tr></thead><tbody>';
+    const body=[];
     sorted.forEach(r=>{
       const rc=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?mpN(r.req[i]):'')+'</td>').join('');
       const sc=[0,1,2].map(i=>'<td class="num '+mpShortCls(r.short?r.short[i]:null)+'">'+(r.short&&r.short[i]!=null?mpN(r.short[i]):'')+'</td>').join('');
       const e=mpEtaFor(etaStore,r);
-      const tip=e.updated_by?('Last updated by '+e.updated_by+(e.updated_at?' · '+new Date(e.updated_at).toLocaleString():'')):'';
+      const tip=mpEtaTip(e);
       const etaCells=[0,1,2].map(i=>'<td class="eta-cell"><input type="date" class="eta-date" title="'+esc(tip)+'" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+esc(e.eta[i]||'')+'"></td>'+
         '<td class="eta-cell num"><input type="number" step="any" min="0" class="eta-qty" title="'+esc(tip)+'" data-eta-key="'+esc(mpEtaKey(r))+'" data-eta-idx="'+i+'" value="'+(e.qty[i]!=null?esc(e.qty[i]):'')+'" placeholder="qty"></td>').join('');
-      html+='<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,52)+'</td><td>'+esc(r.uom)+'</td>'+
+      body.push('<tr><td>'+esc(r.sbu)+'</td><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,52)+'</td><td>'+esc(r.uom)+'</td>'+
         rc+sc+etaCells+
         '<td class="num '+mpCovCls(r.covDays)+'">'+(r.covDays!=null?mpN(r.covDays):'—')+'</td><td class="muted small">'+esc(r.covDate||'—')+'</td>'+
         '<td class="num">'+(r.total3m!=null?mpN(r.total3m):'')+'</td><td class="num">'+(r.whStock!=null?mpN(r.whStock):'')+'</td>'+
         '<td class="num">'+(r.inTransit!=null?mpN(r.inTransit):'')+'</td><td class="num">'+(r.openPR!=null?mpN(r.openPR):'')+'</td>'+
-        '<td class="num">'+(r.available!=null?mpN(r.available):'')+'</td><td>'+esc(r.prCode||'')+'</td></tr>';
+        '<td class="num">'+(r.available!=null?mpN(r.available):'')+'</td><td>'+esc(r.prCode||'')+'</td></tr>');
     });
-    html+='</tbody></table>';
-    wrap.innerHTML=html;
+    wrap.innerHTML='<table><thead><tr><th>SBU</th><th>Code</th><th>Item</th><th>UOM</th>'+
+      '<th class="num">Nov Req</th><th class="num">Dec Req</th><th class="num">Jan Req</th>'+
+      '<th class="num">Nov Short</th><th class="num">Dec Short</th><th class="num">Jan Short</th>'+
+      '<th>ETA 1</th><th class="num">ETA Qty 1</th><th>ETA 2</th><th class="num">ETA Qty 2</th><th>ETA 3</th><th class="num">ETA Qty 3</th>'+
+      '<th class="num">Cov (d)</th><th>Cov Date</th><th class="num">3M Req</th><th class="num">WH Stock</th><th class="num">In Transit</th><th class="num">Open PR</th><th class="num">Available</th><th>PR Code</th></tr></thead><tbody></tbody></table><div class="rowstatus hidden"></div>';
+    fillRows(wrap.querySelector('tbody'),body,wrap.querySelector('.rowstatus'),120);
     const etaHandler=e=>{const inp=e.target;if(!inp||!inp.dataset||!inp.dataset.etaKey)return;const idx=parseInt(inp.dataset.etaIdx,10)||0;mpEtaSave(inp.dataset.etaKey,inp.classList.contains('eta-date')?'eta':'qty',idx,inp.value);};
     wrap.oninput=etaHandler; wrap.onchange=etaHandler;
     MPLAN.last=sorted;
@@ -1119,23 +1280,23 @@ function renderMrpLive(){
       if(as!==bs)return as-bs;
       return String(a.code||'').localeCompare(String(b.code||''));
     });
-    let html='<table><thead><tr><th>Item Code</th><th>Material Description</th><th>UOM</th>'+
-      '<th class="num">Current Month Requirement</th><th class="num">C+1 Requirement</th><th class="num">C+2 Requirement</th>'+
-      '<th class="num">Short Till C</th><th class="num">Short Till C+1</th><th class="num">Short Till C+2</th>'+
-      '<th class="num">Average Monthly Consumption</th><th class="num">Daily Consumption</th>'+
-      '<th class="num" title="Inventory ledger balance: sum of all active receipts, issues, transfers and adjustments">Current Stock Today</th><th class="num">Stock Coverage (Days)</th></tr></thead><tbody>';
+    const body=[];
     sorted.forEach(r=>{
       const rq=[0,1,2].map(i=>'<td class="num">'+(r.req&&r.req[i]!=null?fQ(r.req[i]):'')+'</td>').join('');
       const sh=[0,1,2].map(i=>'<td class="num '+((r.short&&r.short[i]!=null&&r.short[i]<0)?'neg':'')+'">'+(r.short&&r.short[i]!=null?fQ(r.short[i]):'')+'</td>').join('');
       const cov=mlNa(r.coverage);const covCls=r.coverage==null?'neu':(r.coverage<7?'neg':(r.coverage<30?'neu':'pos'));
-      html+='<tr><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,60)+'</td><td>'+esc(r.uom||'—')+'</td>'+
+      body.push('<tr><td>'+esc(r.code)+'</td><td style="white-space:normal">'+esc(r.name).slice(0,60)+'</td><td>'+esc(r.uom||'—')+'</td>'+
         rq+sh+
         '<td class="num">'+mlNa(r.avgCons)+'</td><td class="num">'+mlNa(r.dailyCons)+'</td>'+
         '<td class="num '+((r.stock!=null&&r.stock<0)?'neg':'')+'">'+(r.stock!=null?fQ(r.stock):'N/A')+'</td>'+
-        '<td class="num '+covCls+'">'+cov+'</td></tr>';
+        '<td class="num '+covCls+'">'+cov+'</td></tr>');
     });
-    html+='</tbody></table>';
-    wrap.innerHTML=html;
+    wrap.innerHTML='<table><thead><tr><th>Item Code</th><th>Material Description</th><th>UOM</th>'+
+      '<th class="num">Current Month Requirement</th><th class="num">C+1 Requirement</th><th class="num">C+2 Requirement</th>'+
+      '<th class="num">Short Till C</th><th class="num">Short Till C+1</th><th class="num">Short Till C+2</th>'+
+      '<th class="num">Average Monthly Consumption</th><th class="num">Daily Consumption</th>'+
+      '<th class="num" title="Inventory ledger balance: sum of all active receipts, issues, transfers and adjustments">Current Stock Today</th><th class="num">Stock Coverage (Days)</th></tr></thead><tbody></tbody></table><div class="rowstatus hidden"></div>';
+    fillRows(wrap.querySelector('tbody'),body,wrap.querySelector('.rowstatus'),150);
     MRPL.last=sorted;
   }catch(err){wrap.innerHTML='<div class="warnbox" style="margin:8px">Could not render live MRP: '+esc(err.message||err)+'</div>';}
 }
@@ -1263,10 +1424,13 @@ function refreshMonths(){
   if(!state.month||!av.includes(state.month)) state.month=av.length?av[av.length-1]:null;
   sel.value=state.month||'';
 }
+const rerenderFilters=debounce(()=>renderAll(),220);
+const rerenderMp=debounce(()=>renderMaterialPlanning(),250);
+const rerenderMl=debounce(()=>renderMrpLive(),250);
 function initFilters(){
   document.getElementById('fFy').onchange=e=>{state.fy=parseInt(e.target.value,10);state.month=null;refreshMonths();renderAll();};
   document.querySelectorAll('#fMode button').forEach(b=>b.onclick=()=>{state.mode=b.dataset.m;document.querySelectorAll('#fMode button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
-  document.getElementById('fText').oninput=e=>{state.text=e.target.value;renderAll();};
+  document.getElementById('fText').oninput=e=>{state.text=e.target.value;rerenderFilters();};
   document.getElementById('fMonth').onchange=e=>{state.month=e.target.value;renderAll();};
   document.getElementById('btnReset').onclick=()=>{state.sbu=[];state.kind=[];state.cat=[];state.src=[];state.text='';state.sbuSel='ALL';
     document.getElementById('fText').value='';buildFilterOptions();renderAll();};
@@ -1282,7 +1446,7 @@ function initFilters(){
   const pb=document.getElementById('btnParetoCsv'); if(pb) pb.onclick=exportParetoCsv;
   const mpS=document.getElementById('mpSbu'); if(mpS) mpS.onchange=e=>{MPLAN.sbu=e.target.value;renderMaterialPlanning();};
   const mpM=document.getElementById('mpMonth'); if(mpM) mpM.onchange=e=>{MPLAN.month=parseInt(e.target.value,10)||0;renderMaterialPlanning();};
-  const mpQ=document.getElementById('mpSearch'); if(mpQ) mpQ.oninput=e=>{MPLAN.search=e.target.value;renderMaterialPlanning();};
+  const mpQ=document.getElementById('mpSearch'); if(mpQ) mpQ.oninput=e=>{MPLAN.search=e.target.value;rerenderMp();};
   const mpC=document.getElementById('mpShortOnly'); if(mpC) mpC.onchange=e=>{MPLAN.shortOnly=e.target.checked;renderMaterialPlanning();};
   const mpR=document.getElementById('mpReset'); if(mpR) mpR.onclick=()=>{MPLAN.sbu='';MPLAN.month=0;MPLAN.search='';MPLAN.shortOnly=false;const s=document.getElementById('mpSbu');if(s)s.value='';const mm=document.getElementById('mpMonth');if(mm)mm.value='0';const q=document.getElementById('mpSearch');if(q)q.value='';const c=document.getElementById('mpShortOnly');if(c)c.checked=false;renderMaterialPlanning();};
   const mpCE=document.getElementById('mpClearEta'); if(mpCE) mpCE.onclick=()=>{
@@ -1302,7 +1466,7 @@ function initFilters(){
   };
   const mpX=document.getElementById('mpCsv'); if(mpX) mpX.onclick=exportMaterialPlanning;
   const mlS=document.getElementById('mlSbu'); if(mlS) mlS.onchange=e=>{MRPL.sbu=e.target.value;renderMrpLive();};
-  const mlQ=document.getElementById('mlSearch'); if(mlQ) mlQ.oninput=e=>{MRPL.search=e.target.value;renderMrpLive();};
+  const mlQ=document.getElementById('mlSearch'); if(mlQ) mlQ.oninput=e=>{MRPL.search=e.target.value;rerenderMl();};
   const mlC=document.getElementById('mlShortOnly'); if(mlC) mlC.onchange=e=>{MRPL.shortOnly=e.target.checked;renderMrpLive();};
   const mlR=document.getElementById('mlReset'); if(mlR) mlR.onclick=()=>{MRPL.sbu='';MRPL.search='';MRPL.shortOnly=false;initMrpLive();renderMrpLive();};
   const mlF=document.getElementById('mlRefresh'); if(mlF) mlF.onclick=()=>fetchData(false);
@@ -1322,13 +1486,12 @@ function exportCsv(){
 }
 
 /* ============================ boot / refresh ============================ */
-function renderAll(){
-  const rows=computeItems();
-  renderExec(rows); renderSbu(rows); renderItems(rows); renderDQ(rows);
-  const msec=document.getElementById('tab-monthly'); if(msec && !msec.classList.contains('hidden')) renderMonthly();
-  const psec=document.getElementById('tab-pareto'); if(psec && !psec.classList.contains('hidden')) renderPareto();
-  const mpsec=document.getElementById('tab-materialplan'); if(mpsec && !mpsec.classList.contains('hidden')) renderMaterialPlanning();
-  const mlsec=document.getElementById('tab-mrplive'); if(mlsec && !mlsec.classList.contains('hidden')) renderMrpLive();
+const TABS=['exec','sbu','item','dq','monthly','pareto','materialplan','mrplive'];
+let ACTIVE='exec';
+const DIRTY=new Set(TABS);
+
+function renderChrome(rows){
+  renderKpis(rows);
   document.getElementById('hdrMeta').textContent='As of '+(ASOF?monLabel(ASOF):'—')+'  ·  data generated '+String(META.generatedAt||'').replace('T',' ');
   const warn=document.getElementById('warnBox'); const msgs=[];
   const genTs=META.generatedAt?new Date(META.generatedAt):null;
@@ -1342,22 +1505,66 @@ function renderAll(){
   if(noBud.length)msgs.push('No budget rates for: '+noBud.join(', ')+' (budget tab covers ACCL, AIL, ARMCL, ABSL, APFIL, AEL only).');
   if(msgs.length){warn.classList.remove('hidden');warn.innerHTML=msgs.map(m=>'&#9888; '+m).join('<br/>');}else warn.classList.add('hidden');
 }
+function renderTab(tab,rows){
+  if(!DIRTY.has(tab))return;
+  const t0=performance.now();
+  if(tab==='exec')renderExecBody(rows);
+  else if(tab==='sbu')renderSbu(rows);
+  else if(tab==='item')renderItems(rows);
+  else if(tab==='dq')renderDQ(rows);
+  else if(tab==='monthly')renderMonthly();
+  else if(tab==='pareto')renderPareto();
+  else if(tab==='materialplan')renderMaterialPlanning();
+  else if(tab==='mrplive')renderMrpLive();
+  DIRTY.delete(tab);
+  window.__cogs.lastRender={tab:tab,ms:Math.round((performance.now()-t0)*10)/10};
+}
+/* Recompute once, refresh the always-visible chrome, and render only the tab on screen.
+   Hidden tabs stay dirty until the user opens them. MP/MRP tabs ignore the COGS filters,
+   so they are only invalidated when the dataset itself changes. */
+const FILTER_TABS=['exec','sbu','item','dq','monthly','pareto'];
+function renderAll(){
+  cancelProgressive();
+  const rows=computeItems();
+  renderChrome(rows);
+  FILTER_TABS.forEach(t=>DIRTY.add(t));
+  renderTab(ACTIVE,rows);
+}
+function activateTab(tab){
+  ACTIVE=tab;
+  document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
+  TABS.forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==tab));
+  const rows=computeItems();
+  renderChrome(rows);
+  if(DIRTY.has(tab))renderTab(tab,rows); else redrawCharts();
+}
+function showBootSkeleton(){
+  const cards=[]; for(let i=0;i<4;i++)cards.push('<div class="kpi"><div class="skel skel-line" style="width:55%"></div><div class="skel" style="height:20px;margin-top:9px;width:75%"></div></div>');
+  document.getElementById('kpis').innerHTML=cards.join('');
+  document.getElementById('tab-exec').innerHTML='<div class="grid2"><div class="card"><div class="skel skel-line" style="width:35%"></div><div class="skel" style="height:190px;margin-top:14px"></div></div><div class="card"><div class="skel skel-line" style="width:30%"></div><div class="skel" style="height:190px;margin-top:14px"></div></div></div>';
+}
 function setStatus(s){document.getElementById('hdrStatus').textContent=s||'';}
 function fetchData(silent){
-  const bust='data.json?v='+Date.now();
-  setStatus('refreshing…');
-  return fetch(bust,{cache:'no-store'})
+  const empty=!DATA.items.length;
+  setStatus(empty?'loading data…':(silent?'checking for updates…':'refreshing…'));
+  const url='data.json'+(silent?'':'?v='+Date.now());
+  return fetch(url,{cache:silent?'default':'no-store'})
     .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(d=>{ setData(d); syncState(); MRAT.leFrom=ASOF; buildFilterOptions(); initMaterialPlanning(); initMrpLive(); initMonthlyControls(); refreshMonths(); renderAll(); setStatus('updated '+new Date().toLocaleTimeString()); })
-    .catch(e=>{ setStatus(''); if(!silent) alert('Could not load data.json: '+e.message+'\n(this is normal when opened as a local file - showing the embedded snapshot).'); });
+    .then(d=>{
+      const dm=(d&&(d.meta||d))||{};
+      const same=!!(d&&META.generatedAt&&dm.generatedAt===META.generatedAt&&String(dm.asOf||'')===String(META.asOf||''));
+      if(same){ setStatus('up to date · '+new Date().toLocaleTimeString()); return; }
+      setData(d); syncState(); MRAT.leFrom=ASOF;
+      buildFilterOptions(); initMaterialPlanning(); initMrpLive(); initMonthlyControls(); refreshMonths();
+      TABS.forEach(t=>DIRTY.add(t));
+      renderAll();
+      setStatus('updated '+new Date().toLocaleTimeString());
+    })
+    .catch(e=>{ setStatus(empty?'could not load data':'offline — showing cached data'); if(!silent) alert('Could not load data.json: '+e.message+'\n(this is normal when opened as a local file - showing the embedded snapshot).'); });
 }
-document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active',x===t));
-  ['exec','sbu','item','dq','monthly','pareto','materialplan','mrplive'].forEach(k=>document.getElementById('tab-'+k).classList.toggle('hidden',k!==t.dataset.tab));
-  renderAll();
-});
-let _rz=null; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>renderAll(),200);});
-window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,MPLAN:MPLAN,MRPL:MRPL,renderMonthly:renderMonthly,renderPareto:renderPareto,renderMaterialPlanning:renderMaterialPlanning,renderMrpLive:renderMrpLive,leCompute:leCompute,monthsBetween:monthsBetween};
+document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>activateTab(t.dataset.tab));
+let _rz=null; window.addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>redrawCharts(),150);});
+window.__cogs={state:state,computeItems:computeItems,totals:totals,periodMonths:periodMonths,renderAll:renderAll,activateTab:activateTab,fetchData:fetchData,MRAT:MRAT,PARETO:PARETO,MPLAN:MPLAN,MRPL:MRPL,renderMonthly:renderMonthly,renderPareto:renderPareto,renderMaterialPlanning:renderMaterialPlanning,renderMrpLive:renderMrpLive,leCompute:leCompute,monthsBetween:monthsBetween};
 
 /* boot: show the embedded snapshot immediately, then try to load live data.json */
 setData(window.COGS || {sbus:[],items:[],budget:[]});
@@ -1368,9 +1575,10 @@ initMaterialPlanning();
 initMrpLive();
 initMonthlyControls();
 refreshMonths();
-renderAll();
+if(DATA.items.length){ renderAll(); }
+else { showBootSkeleton(); setStatus('loading data…'); }
 mpEtaBoot();
-fetchData(true);
+setTimeout(()=>fetchData(true),250);
 </script>
 </body>
 </html>
