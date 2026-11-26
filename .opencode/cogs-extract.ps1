@@ -181,15 +181,14 @@ FROM pro.tblMRPFromProductionScheduleHeader WITH (NOLOCK)
 WHERE isActive = 1 AND dteFromDate <= '$todayS' AND dteToDate >= '$todayS'
 ORDER BY intBusinessUnitId, dteFromDate DESC, intMRPFromProductionHeaderId DESC
 "@
-    $sbuMap = @{ 'AEL' = 'Mustard' }
     $hdr = @{}; $hdrOrder = New-Object System.Collections.Generic.List[int]
     foreach ($c in $hdrRows) {
       if ($c.Count -lt 5) { continue }
       $bu = [int]$c[2]
       if ($hdr.ContainsKey($bu)) { continue }
       $code = "$($c[1])"
+      # Use the SBU code from the MRP run code (MRP-AEL-... -> AEL) so tabs filter by the same SBUs as the rest of the dashboard.
       $sbu = if ($code -match '^MRP-([A-Z]+)-') { $Matches[1] } else { "BU$bu" }
-      if ($sbuMap.ContainsKey($sbu)) { $sbu = $sbuMap[$sbu] }
       $hdr[$bu] = [pscustomobject]@{ id = [int]$c[0]; code = $code; bu = $bu; sbu = $sbu; from = [datetime]::Parse("$($c[3])") }
       $hdrOrder.Add($bu)
     }
